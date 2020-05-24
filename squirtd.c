@@ -27,7 +27,6 @@ cleanupForNextRun(void)
     filename = 0;
   }
 
-
   if (output_fd) {
     Close(output_fd);
     output_fd = 0;
@@ -38,6 +37,7 @@ cleanupForNextRun(void)
     accept_fd = 0;
   }
 }
+
 
 static void
 cleanupAndExit(void)
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
   uint32_t nameLength;
   const int port = 6969;
   const int ONE = 1;
- LONG addr_size;
+  LONG addr_size;
   struct sockaddr_in sa, isa;
 
   memset(&sa, 0, sizeof(struct sockaddr_in));
@@ -117,7 +117,6 @@ int main(int argc, char **argv)
 
   filename[nameLength+strlen(destFolder)] = 0;
 
-
   if (recv(accept_fd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
     fprintf(stderr, "recv() failed to read file length\n");
     cleanupAndExit();
@@ -148,6 +147,7 @@ int main(int argc, char **argv)
   printf("got %s -> %d\n", filename, total);
 
   cleanupForNextRun();
+
   goto again;
 
   cleanupAndExit();

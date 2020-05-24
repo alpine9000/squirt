@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 
+static const int BLOCK_SIZE = 8192;
 static int socket_fd = 0;
 static int file_fd = 0;
 static char* read_buffer = 0;
@@ -36,6 +37,7 @@ cleanupAndExit(void)
   exit(0);
 }
 
+
 static int
 getSockAddr(const char * host, int port, struct sockaddr_in * addr)
 {
@@ -45,7 +47,7 @@ getSockAddr(const char * host, int port, struct sockaddr_in * addr)
     char **ip_addr;
     memcpy(&ip_addr, &(remote->h_addr_list[0]), sizeof(void *));
     memcpy(&addr->sin_addr.s_addr, ip_addr, sizeof(struct in_addr));
-  } else if ((addr->sin_addr.s_addr = inet_addr(host)) == (unsigned long)INADDR_NONE) { /* -1 */
+  } else if ((addr->sin_addr.s_addr = inet_addr(host)) == (unsigned long)INADDR_NONE) {
     return 0;
   }
 
@@ -55,7 +57,8 @@ getSockAddr(const char * host, int port, struct sockaddr_in * addr)
   return 1;
 }
 
-void
+
+static void
 printFormatSpeed(int32_t size, double elapsed)
 {
   double speed = (double)size/elapsed;
@@ -66,13 +69,16 @@ printFormatSpeed(int32_t size, double elapsed)
   }
 }
 
+
 int
 main(int argc, char* argv[])
 {
   const int ONE = 1;
-
   struct stat st;
   int32_t fileLength;
+  struct sockaddr_in sockAddr;
+  int total = 0;
+  struct timeval start, end;
 
   if (argc != 3) {
     fprintf(stderr, "usage: %s file hostname\n", argv[0]);
@@ -86,13 +92,10 @@ main(int argc, char* argv[])
 
   fileLength = st.st_size;
 
-  struct sockaddr_in sockAddr;
-
   if (!getSockAddr(argv[2], 6969, &sockAddr)) {
     fprintf(stderr, "getSockAddr() failed\n");
     cleanupAndExit();
   }
-
 
   if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     fprintf(stderr, "socket() failed\n");
@@ -108,11 +111,11 @@ main(int argc, char* argv[])
 
   int32_t nameLength = strlen(argv[1]);
   int32_t networkNameLength = htonl(nameLength);
+
   if (send(socket_fd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(nameLength)) {
     fprintf(stderr, "send() nameLength failed\n");
     cleanupAndExit();
   }
-
 
   if (send(socket_fd, argv[1], nameLength, 0) != nameLength) {
     fprintf(stderr, "send() name failed\n");
@@ -120,6 +123,7 @@ main(int argc, char* argv[])
   }
 
   int32_t networkFileLength = htonl(fileLength);
+
   if (send(socket_fd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
     fprintf(stderr, "send() fileLength failed\n");
     cleanupAndExit();
@@ -132,10 +136,7 @@ main(int argc, char* argv[])
     cleanupAndExit();
   }
 
-  const int BLOCK_SIZE = 8192;
   read_buffer = malloc(BLOCK_SIZE);
-  int total = 0;
-  struct timeval start, end;
 
   printf("squirting %s (%d bytes)\n", argv[1], fileLength);
 
