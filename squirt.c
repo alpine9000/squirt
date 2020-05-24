@@ -1,40 +1,52 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/uio.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <sys/time.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 
 static const int BLOCK_SIZE = 8192;
-static int socket_fd = 0;
-static int file_fd = 0;
-static char* read_buffer = 0;
+static int socketFd = 0;
+static int fileFd = 0;
+static char* readBuffer = 0;
 
 static void
 cleanupAndExit(void)
 {
-  if (read_buffer) {
-    free(read_buffer);
-    read_buffer = 0;
+  if (readBuffer) {
+    free(readBuffer);
+    readBuffer = 0;
   }
 
-  if (socket_fd) {
-    close(socket_fd);
-    socket_fd = 0;
+  if (socketFd) {
+    close(socketFd);
+    socketFd = 0;
   }
 
-  if (file_fd) {
-    close(file_fd);
-    file_fd = 0;
+  if (fileFd) {
+    close(fileFd);
+    fileFd = 0;
   }
 
   exit(0);
+}
+
+
+static void
+fatalError(const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  cleanupAndExit();
 }
 
 
@@ -62,81 +74,101 @@ static void
 printFormatSpeed(int32_t size, double elapsed)
 {
   double speed = (double)size/elapsed;
-  if (speed < 1024) {
+  if (speed < 1000) {
     printf("%0.2f bytes/s", speed);
+  } else if (speed < 1000000) {
+    printf("%0.2f kB/s", speed/1000.0f);
   } else {
-    printf("%0.2f kb/s", speed/1024.0f);
+    printf("%0.2f MB/s", speed/1000000.0f);
   }
 }
 
+static void
+printProgress(struct timeval* start, int total, int fileLength)
+{
+  int percentage = (total*100)/fileLength;
+  int screenPercentage = (percentage*60)/100;
+  struct timeval current;
+
+  printf("\r%c[K", 27);
+  printf("%02d%% [", percentage);
+  //  printf("[");
+  for (int i = 0; i < 60; i++) {
+    if (screenPercentage > i) {
+      printf("=");
+    } else if (screenPercentage == i) {
+      printf(">");
+    } else {
+      printf(" ");
+    }
+  }
+  printf("] ");
+
+  gettimeofday(&current, NULL);
+  long seconds = current.tv_sec - start->tv_sec;
+  long micros = ((seconds * 1000000) + current.tv_usec) - start->tv_usec;
+  printFormatSpeed(total, ((double)micros)/1000000.0f);
+  fflush(stdout);
+}
 
 int
 main(int argc, char* argv[])
 {
   const int ONE = 1;
-  struct stat st;
-  int32_t fileLength;
-  struct sockaddr_in sockAddr;
   int total = 0;
+  int32_t fileLength;
+  struct stat st;
+  struct sockaddr_in sockAddr;
   struct timeval start, end;
 
   if (argc != 3) {
-    fprintf(stderr, "usage: %s file hostname\n", argv[0]);
-    cleanupAndExit();
+    fatalError("usage: %s filename hostname\n", argv[0]);
   }
 
   if (stat(argv[1], &st) == -1) {
-    fprintf(stderr, "%s: filed to stat %s\n", argv[0], argv[1]);
-    cleanupAndExit();
+    fatalError("%s: filed to stat %s\n", argv[0], argv[1]);
   }
 
   fileLength = st.st_size;
 
   if (!getSockAddr(argv[2], 6969, &sockAddr)) {
-    fprintf(stderr, "getSockAddr() failed\n");
-    cleanupAndExit();
+    fatalError("getSockAddr() failed\n");
   }
 
-  if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fprintf(stderr, "socket() failed\n");
-    cleanupAndExit();
+  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    fatalError("socket() failed\n");
   }
 
-  setsockopt(socket_fd, SOL_SOCKET, SO_KEEPALIVE, (void*)&ONE, sizeof ONE);
+  setsockopt(socketFd, SOL_SOCKET, SO_KEEPALIVE, (void*)&ONE, sizeof ONE);
 
-  if (connect(socket_fd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fprintf(stderr, "connect() failed\n");
-    cleanupAndExit();
+  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
+    fatalError("connect() failed\n");
   }
 
   int32_t nameLength = strlen(argv[1]);
   int32_t networkNameLength = htonl(nameLength);
 
-  if (send(socket_fd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(nameLength)) {
-    fprintf(stderr, "send() nameLength failed\n");
-    cleanupAndExit();
+  if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(nameLength)) {
+    fatalError("send() nameLength failed\n");
   }
 
-  if (send(socket_fd, argv[1], nameLength, 0) != nameLength) {
-    fprintf(stderr, "send() name failed\n");
-    cleanupAndExit();
+  if (send(socketFd, argv[1], nameLength, 0) != nameLength) {
+    fatalError("send() name failed\n");
   }
 
   int32_t networkFileLength = htonl(fileLength);
 
-  if (send(socket_fd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
-    fprintf(stderr, "send() fileLength failed\n");
-    cleanupAndExit();
+  if (send(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
+    fatalError("send() fileLength failed\n");
   }
 
-  file_fd = open(argv[1], O_RDONLY);
+  fileFd = open(argv[1], O_RDONLY);
 
-  if (!file_fd) {
-    fprintf(stderr, "%s: failed to open %s\n", argv[0], argv[1]);
-    cleanupAndExit();
+  if (!fileFd) {
+    fatalError("%s: failed to open %s\n", argv[0], argv[1]);
   }
 
-  read_buffer = malloc(BLOCK_SIZE);
+  readBuffer = malloc(BLOCK_SIZE);
 
   printf("squirting %s (%d bytes)\n", argv[1], fileLength);
 
@@ -144,20 +176,18 @@ main(int argc, char* argv[])
 
   do {
     int len;
-    if ((len = read(file_fd, read_buffer, BLOCK_SIZE) ) < 0) {
-      fprintf(stderr, "%s failed to read %s\n", argv[0], argv[1]);
-      cleanupAndExit();
+    if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
+      fatalError("%s failed to read %s\n", argv[0], argv[1]);
     } else {
-      printf("#");
-      fflush(stdout);
-      if (send(socket_fd, read_buffer, len, 0) != len) {
-	perror("send() failed\n");
-	cleanupAndExit();
+      printProgress(&start, total, fileLength);
+      if (send(socketFd, readBuffer, len, 0) != len) {
+	fatalError("send() failed\n");
       }
       total += len;
     }
   } while (total < fileLength);
 
+  printProgress(&start, total, fileLength);
 
   gettimeofday(&end, NULL);
 

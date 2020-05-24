@@ -1,12 +1,14 @@
-all: squirtd squirt
+all: squirt squirtd.amiga squirtd.unix
 CFLAGS=-fsanitize=address -fsanitize=undefined -O2 -Wall
 
-squirt: squirt.c
+squirt: squirt.c Makefile
 	gcc $(CFLAGS) squirt.c -o squirt
 
-squirtd: squirtd.c
-	vc -sd -O4 -c99 +aos68k squirtd.c -o squirtd -lautos
-	cp squirtd squirtd.1
+squirtd.unix: squirtd.c Makefile
+	gcc $(CFLAGS) squirtd.c -o squirtd.unix
+
+squirtd.amiga: squirtd.c Makefile
+	vc -DAMIGA -static -c99 +aos68k squirtd.c -o squirtd.amiga -lauto
 
 clean:
-	rm squirtd squirt squirtd.1
+	rm -f squirt squirtd.unix squirtd.amiga
