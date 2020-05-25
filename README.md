@@ -1,4 +1,4 @@
-# squirt - Transfer files from Unix to Amiga via TCP/IP
+# squirt - Transfer files from modern computers to Amiga via TCP/IP
 
 Push files quickly from a modern computer to an Amiga. squirtd is designed to be super small, use hardly any ram and super fast.
 
