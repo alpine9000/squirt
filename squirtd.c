@@ -13,13 +13,18 @@
 #include <arpa/inet.h>
 #endif
 
+#include "squirt.h"
+
 #ifdef AMIGA
 typedef BPTR file_handle_t;
 #define SOCKLEN_T LONG
+#define printf(...)
+#define fprintf(...)
+#define fatalError(x) _fatalError()
 #else
 typedef int file_handle_t;
 typedef int32_t LONG;
-#define CONSOLE_OUTPUT_ENABLED
+#define fatalError(x) _fatalError(x)
 #define DeleteFile(x)
 #define Open(x, y) open(x, y, 0777)
 #define Close(x) close(x)
@@ -27,16 +32,15 @@ typedef int32_t LONG;
 #define Write(x, y, z) write(x, y, z)
 #define SOCKLEN_T socklen_t
 #define MODE_READWRITE (O_WRONLY|O_CREAT)
+#define MODE_NEWFILE (O_WRONLY|O_CREAT)
 #endif
 
-static const int networkPort = 6969;
-static const int BLOCK_SIZE = 8192;
 static const char* destFolder;
 static int socketFd = 0;
 static int acceptFd = 0;
 static file_handle_t outputFd = 0;
 static char* filename = 0;
-static char * rxBuffer = 0;
+static char* rxBuffer = 0;
 
 static void
 cleanupForNextRun(void)
@@ -75,24 +79,18 @@ cleanup(void)
 }
 
 
-#ifdef CONSOLE_OUTPUT_ENABLED
+#ifdef AMIGA
+static void
+_fatalError(void)
+#else
 static void
 _fatalError(const char *msg)
+#endif
 {
   fprintf(stderr, "%s", msg);
   cleanup();
   exit(0);
 }
-#define fatalError(x) _fatalError(x)
-#else
-static void
-_fatalError(void)
-{
-  cleanup();
-  exit(0);
-}
-#define fatalError(x) _fatalError()
-#endif
 
 
 int main(int argc, char **argv)
@@ -111,8 +109,8 @@ int main(int argc, char **argv)
 
   memset(&sa, 0, sizeof(struct sockaddr_in));
   sa.sin_family = AF_INET;
-  sa.sin_addr.s_addr = 0;//inet_addr("0.0.0.0");
-  sa.sin_port = htons(networkPort);
+  sa.sin_addr.s_addr = 0; //inet_addr("0.0.0.0");
+  sa.sin_port = htons(NETWORK_PORT);
 
   socketFd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -126,18 +124,26 @@ int main(int argc, char **argv)
     fatalError("bind() failed\n");
   }
 
-  if (listen(socketFd, 5)) {
+  if (listen(socketFd, 1)) {
     fatalError("listen() failed\n");
   }
 
+  int32_t error;
+
  again:
+
+  error = 0;
 
   if ((acceptFd = accept(socketFd, (struct sockaddr*)&isa, (SOCKLEN_T*)&addr_size)) == -1) {
     fatalError("accept() failed\n");
   }
 
+  LONG socketTimeout = 1000;
+  setsockopt(acceptFd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&socketTimeout, sizeof(socketTimeout));
+
   if (recv(acceptFd, (void*)&nameLength, sizeof(nameLength), 0) != sizeof(nameLength)) {
-    fatalError("recv() failed to read name length\n");
+    error = ERROR_RECV_FAILED_READING_NAME_LENGTH;
+    goto cleanup;
   }
 
   int destFolderLen = strlen(destFolder);
@@ -146,40 +152,52 @@ int main(int argc, char **argv)
   strcpy(filename, destFolder);
 
   if (recv(acceptFd, filename+destFolderLen, nameLength, 0) != nameLength) {
-    fatalError("recv() failed to read name\n");
+    error = ERROR_RECV_FAILED_READING_FILENAME;
+    goto cleanup;
   }
 
   filename[nameLength+destFolderLen] = 0;
 
   if (recv(acceptFd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
-    fatalError("recv() failed to read file length\n");
+    error = ERROR_RECV_FAILED_READING_FILE_LENGTH;
+    goto cleanup;
   }
 
   fileLength = ntohl(fileLength);
 
   DeleteFile(filename);
-  outputFd = Open(filename, MODE_READWRITE);
+  outputFd = Open(filename, MODE_NEWFILE);
 
   if (!outputFd) {
-    fatalError("failed to open remote file\n");
+    error = ERROR_FAILED_TO_CREATE_DESTINATION_FILE;
+    goto cleanup;
   }
 
   rxBuffer = malloc(BLOCK_SIZE);
-  int total = 0;
+  int total = 0, timeout = 0;
   int length;
   do {
     if ((length = recv(acceptFd, (void*)rxBuffer, BLOCK_SIZE, 0)) < 0) {
-      fatalError("recv() failed\n");
+      error = ERROR_RECV_FAILED_READING_FILE_DATA;
+      goto cleanup;
     }
-    total += length;
-    if (Write(outputFd, rxBuffer, length) != length) {
-      fatalError("write() failed\n");
+    if (length) {
+      total += length;
+      if (Write(outputFd, rxBuffer, length) != length) {
+	error = ERROR_WRITE_FAILED_WRITING_FILE_DATA;
+	goto cleanup;
+      }
+      timeout = 0;
+    } else {
+      timeout++;
     }
-  } while (total < fileLength);
+  } while (timeout < 2 && total < fileLength);
 
-#ifdef CONSOLE_OUTPUT_ENABLED
   printf("got %s -> %d\n", filename, total);
-#endif
+
+ cleanup:
+  error = htonl(error);
+  send(acceptFd, (void*)&error, sizeof(error), 0);
 
   cleanupForNextRun();
 

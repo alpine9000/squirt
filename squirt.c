@@ -14,12 +14,22 @@
 #include <sys/uio.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include "squirt.h"
 
-static const int BLOCK_SIZE = 8192;
 static int socketFd = 0;
 static int fileFd = 0;
 static int screenWidth;
 static char* readBuffer = 0;
+static const char* errors[] = {
+  [ERROR_SUCCESS] = "Unknown error",
+  [ERROR_RECV_FAILED_READING_NAME_LENGTH] = "recv() failed reading name length",
+  [ERROR_RECV_FAILED_READING_FILENAME] = "recv() failed reading filename",
+  [ERROR_RECV_FAILED_READING_FILE_LENGTH] = "recv() failed reading file length",
+  [ERROR_FAILED_TO_CREATE_DESTINATION_FILE] = "Failed to create destination file",
+  [ERROR_RECV_FAILED_READING_FILE_DATA] = "recv() failed reading file data",
+  [ERROR_WRITE_FAILED_WRITING_FILE_DATA] = "Write() failed writing file data"
+};
+
 
 static void
 cleanupAndExit(void)
@@ -87,6 +97,7 @@ printFormatSpeed(int32_t size, double elapsed)
   }
 }
 
+
 static void
 printProgress(struct timeval* start, int total, int fileLength)
 {
@@ -116,6 +127,7 @@ printProgress(struct timeval* start, int total, int fileLength)
   fflush(stdout);
 }
 
+
 static void
 getWindowSize(void)
 {
@@ -124,6 +136,7 @@ getWindowSize(void)
   getmaxyx(stdscr, ydim, screenWidth);
   endwin();
 }
+
 
 int
 main(int argc, char* argv[])
@@ -151,7 +164,7 @@ main(int argc, char* argv[])
   setlocale(LC_NUMERIC, "");
   getWindowSize();
 
-  if (!getSockAddr(argv[2], 6969, &sockAddr)) {
+  if (!getSockAddr(argv[2], NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
   }
 
@@ -206,17 +219,32 @@ main(int argc, char* argv[])
       }
       total += len;
     }
+
   } while (total < fileLength);
 
   printProgress(&start, total, fileLength);
 
-  gettimeofday(&end, NULL);
+  uint32_t error;
 
-  long seconds = end.tv_sec - start.tv_sec;
-  long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-  printf("\nsquirted %s (%'d bytes) in %0.02f seconds ", filename, fileLength, ((double)micros)/1000000.0f);
-  printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
-  printf("\n");
+  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+    fatalError("failed to read remote status\n");
+  }
+
+  error = ntohl(error);
+
+  if (ntohl(error) == 0) {
+    gettimeofday(&end, NULL);
+    long seconds = end.tv_sec - start.tv_sec;
+    long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
+    printf("\nsquirted %s (%'d bytes) in %0.02f seconds ", filename, fileLength, ((double)micros)/1000000.0f);
+    printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
+    printf("\n");
+  } else {
+    if (error >= sizeof(errors)) {
+      error = 0;
+    }
+    fprintf(stderr, "\n**FAILED** to squirt %s\n%s\n", filename, errors[error]);
+  }
 
   cleanupAndExit();
 
