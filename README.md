@@ -1,6 +1,6 @@
 # squirt - Transfer files from modern computers to Amiga via TCP/IP
 
-Push files quickly from a modern computer to an Amiga. `squirtd` is designed to be super small, use hardly any ram and super fast.
+Push files quickly from a modern computer to an Amiga. `squirtd` is designed to be super small, use hardly any ram and transfer files as fast as possible. The Amiga `squirtd` executable is about `3.5Kb`.
 
 :radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
 
