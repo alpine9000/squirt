@@ -10,7 +10,7 @@ There are no passwords, no server side validations and transfers are plain text.
 
 `squirtd` requires a destination folder argument where it will write any files that are squirted it's way.
 
-    squirtd <destination folder>
+    squirtd destination_folder
 
 Note: `destination folder` must end with a valid directory separator character as the filename is simply appended to `destination folder`. 
 
@@ -37,6 +37,10 @@ Add the following to S:Network-Startup.
 where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
 
 ## squirting a file
+
+client usage is as follows:
+
+    squirt filename hostname
 
 See below for a demo of squirting a 5mb file to my real Amiga 500 with an XSurf-500
 
