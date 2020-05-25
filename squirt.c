@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <locale.h>
+#include <libgen.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -133,16 +134,16 @@ main(int argc, char* argv[])
   struct stat st;
   struct sockaddr_in sockAddr;
   struct timeval start, end;
-  const char* filename;
+  const char* fullPathname;
 
   if (argc != 3) {
     fatalError("usage: %s filename hostname\n", argv[0]);
   }
 
-  filename = argv[1];
+  fullPathname = argv[1];
 
-  if (stat(filename, &st) == -1) {
-    fatalError("%s: filed to stat %s\n", argv[0], filename);
+  if (stat(fullPathname, &st) == -1) {
+    fatalError("%s: filed to stat %s\n", argv[0], fullPathname);
   }
 
   fileLength = st.st_size;
@@ -164,6 +165,7 @@ main(int argc, char* argv[])
     fatalError("connect() failed\n");
   }
 
+  const char* filename = basename((char*)fullPathname);
   int32_t nameLength = strlen(filename);
   int32_t networkNameLength = htonl(nameLength);
 
@@ -181,10 +183,10 @@ main(int argc, char* argv[])
     fatalError("send() fileLength failed\n");
   }
 
-  fileFd = open(filename, O_RDONLY);
+  fileFd = open(fullPathname, O_RDONLY);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", argv[0], filename);
+    fatalError("%s: failed to open %s\n", argv[0], fullPathname);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
@@ -196,7 +198,7 @@ main(int argc, char* argv[])
   do {
     int len;
     if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read %s\n", argv[0], filename);
+      fatalError("%s failed to read %s\n", argv[0], fullPathname);
     } else {
       printProgress(&start, total, fileLength);
       if (send(socketFd, readBuffer, len, 0) != len) {
