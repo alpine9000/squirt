@@ -10,6 +10,12 @@ squirtd requires a destination folder argument where it will write any files tha
 
     squirtd <destination folder>
 
+Note: `destination folder` must end with a valid directory separator character as the filename is simply appended to `destination folder`. 
+
+For example:
+
+    squirtd Work:Incoming/
+
 ## Running as a daemon
 
 It's easy to run squirtd on your Amiga as a background daemon, just start it from your TCP/IP stack's startup script. squirtd should gracefully exit when your TCP/IP stack exits.
@@ -17,16 +23,16 @@ It's easy to run squirtd on your Amiga as a background daemon, just start it fro
 ### AmiTCP
 Add the following to AmiTCP:db/User-Startnet.
 
-    run >NIL: aux:squirtd aux:
+    run >NIL: aux:squirtd Work:Incoming/
     
-where `aux:` is the destination folder you want squirtd to write files.
+where `Work:Incoming/` is the destination folder you want squirtd to write files.
     
 ### Roadshow
 Add the following to S:Network-Startup.
 
-    run >NIL: aux:squirtd aux:
+    run >NIL: aux:squirtd Work:Incoming/
 
-where `aux:` is the destination folder you want squirtd to write files.
+where `Work:Incoming/` is the destination folder you want squirtd to write files.
 
 ## squirting a file
 
