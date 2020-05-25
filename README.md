@@ -42,7 +42,7 @@ client usage is as follows:
 
     squirt filename hostname
 
-See below for a demo of squirting a 5mb file to my real Amiga 500 with an XSurf-500
+See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 with an XSurf-500.
 
 ![](demo.gif)
 
