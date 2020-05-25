@@ -2,7 +2,7 @@ all: squirt squirtd.amiga squirtd.unix
 CFLAGS=-fsanitize=address -fsanitize=undefined -O2 -Wall
 
 squirt: squirt.c Makefile
-	gcc $(CFLAGS) squirt.c -o squirt
+	gcc $(CFLAGS) squirt.c -o squirt -lncurses
 
 squirtd.unix: squirtd.c Makefile
 	gcc $(CFLAGS) squirtd.c -o squirtd.unix

@@ -1,3 +1,4 @@
+#include <ncurses.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -6,6 +7,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <locale.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -15,6 +17,7 @@
 static const int BLOCK_SIZE = 8192;
 static int socketFd = 0;
 static int fileFd = 0;
+static int screenWidth;
 static char* readBuffer = 0;
 
 static void
@@ -87,13 +90,14 @@ static void
 printProgress(struct timeval* start, int total, int fileLength)
 {
   int percentage = (total*100)/fileLength;
-  int screenPercentage = (percentage*60)/100;
+  int barWidth = screenWidth - 20;
+  int screenPercentage = (percentage*barWidth)/100;
   struct timeval current;
 
   printf("\r%c[K", 27);
   printf("%02d%% [", percentage);
-  //  printf("[");
-  for (int i = 0; i < 60; i++) {
+
+  for (int i = 0; i < barWidth; i++) {
     if (screenPercentage > i) {
       printf("=");
     } else if (screenPercentage == i) {
@@ -111,6 +115,15 @@ printProgress(struct timeval* start, int total, int fileLength)
   fflush(stdout);
 }
 
+static void
+getWindowSize(void)
+{
+  initscr();
+  int ydim;
+  getmaxyx(stdscr, ydim, screenWidth);
+  endwin();
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -120,16 +133,22 @@ main(int argc, char* argv[])
   struct stat st;
   struct sockaddr_in sockAddr;
   struct timeval start, end;
+  const char* filename;
 
   if (argc != 3) {
     fatalError("usage: %s filename hostname\n", argv[0]);
   }
 
-  if (stat(argv[1], &st) == -1) {
-    fatalError("%s: filed to stat %s\n", argv[0], argv[1]);
+  filename = argv[1];
+
+  if (stat(filename, &st) == -1) {
+    fatalError("%s: filed to stat %s\n", argv[0], filename);
   }
 
   fileLength = st.st_size;
+
+  setlocale(LC_NUMERIC, "");
+  getWindowSize();
 
   if (!getSockAddr(argv[2], 6969, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
@@ -145,14 +164,14 @@ main(int argc, char* argv[])
     fatalError("connect() failed\n");
   }
 
-  int32_t nameLength = strlen(argv[1]);
+  int32_t nameLength = strlen(filename);
   int32_t networkNameLength = htonl(nameLength);
 
   if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(nameLength)) {
     fatalError("send() nameLength failed\n");
   }
 
-  if (send(socketFd, argv[1], nameLength, 0) != nameLength) {
+  if (send(socketFd, filename, nameLength, 0) != nameLength) {
     fatalError("send() name failed\n");
   }
 
@@ -162,22 +181,22 @@ main(int argc, char* argv[])
     fatalError("send() fileLength failed\n");
   }
 
-  fileFd = open(argv[1], O_RDONLY);
+  fileFd = open(filename, O_RDONLY);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", argv[0], argv[1]);
+    fatalError("%s: failed to open %s\n", argv[0], filename);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("squirting %s (%d bytes)\n", argv[1], fileLength);
+  printf("squirting %s (%'d bytes)\n", filename, fileLength);
 
   gettimeofday(&start, NULL);
 
   do {
     int len;
     if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read %s\n", argv[0], argv[1]);
+      fatalError("%s failed to read %s\n", argv[0], filename);
     } else {
       printProgress(&start, total, fileLength);
       if (send(socketFd, readBuffer, len, 0) != len) {
@@ -193,7 +212,7 @@ main(int argc, char* argv[])
 
   long seconds = end.tv_sec - start.tv_sec;
   long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-  printf("\nsquirted %d bytes in %0.02f seconds ", fileLength, ((double)micros)/1000000.0f);
+  printf("\nsquirted %s (%'d bytes) in %0.02f seconds ", filename, fileLength, ((double)micros)/1000000.0f);
   printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
   printf("\n");
 
