@@ -2,7 +2,9 @@
 
 Push files quickly from a modern computer to an Amiga. squirtd is designed to be super small, use hardly any ram and super fast.
 
-Please don't run squirtd on any computer that is connected to the open internet. It's insecure and allows anyone to write files directly to the computer.
+:radioactive::warning::no_entry: Please don't run squirtd on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
+
+There are no passwords, no server side validations and transfers are plain text. To top it off it's written in C and the server code has `goto` statements! :stuck_out_tongue_closed_eyes:
 
 ## Usage
 
