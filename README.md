@@ -1,14 +1,14 @@
 # squirt - Transfer files from modern computers to Amiga via TCP/IP
 
-Push files quickly from a modern computer to an Amiga. squirtd is designed to be super small, use hardly any ram and super fast.
+Push files quickly from a modern computer to an Amiga. `squirtd` is designed to be super small, use hardly any ram and super fast.
 
-:radioactive::warning::no_entry: Please don't run squirtd on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
+:radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
 
 There are no passwords, no server side validations and transfers are plain text. To top it off it's written in C and the server code has `goto` statements! :stuck_out_tongue_closed_eyes:
 
 ## Usage
 
-squirtd requires a destination folder argument where it will write any files that are squirted it's way.
+`squirtd` requires a destination folder argument where it will write any files that are squirted it's way.
 
     squirtd <destination folder>
 
@@ -20,21 +20,21 @@ For example:
 
 ## Running as a daemon
 
-It's easy to run squirtd on your Amiga as a background daemon, just start it from your TCP/IP stack's startup script. squirtd should gracefully exit when your TCP/IP stack exits.
+It's easy to run `squirtd` on your Amiga as a background daemon, just start it from your TCP/IP stack's startup script. `squirtd` should gracefully exit when your TCP/IP stack exits.
 
 ### AmiTCP
 Add the following to AmiTCP:db/User-Startnet.
 
     run >NIL: aux:squirtd Work:Incoming/
     
-where `Work:Incoming/` is the destination folder you want squirtd to write files.
+where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
     
 ### Roadshow
 Add the following to S:Network-Startup.
 
     run >NIL: aux:squirtd Work:Incoming/
 
-where `Work:Incoming/` is the destination folder you want squirtd to write files.
+where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
 
 ## squirting a file
 
