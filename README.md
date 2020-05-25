@@ -10,7 +10,7 @@ squirtd requires a destination folder argument where it will write any files tha
 
     squirtd <destination folder>
 
-Note: `<destination folder>` must end with a valid directory separator character as the filename is simply appended to `<destination folder>`. 
+Note: `destination folder` must end with a valid directory separator character as the filename is simply appended to `destination folder`. 
 
 For example:
 
