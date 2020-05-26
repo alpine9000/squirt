@@ -1,14 +1,18 @@
 #pragma once
 
-typedef enum {
-  ERROR_SUCCESS,
-  ERROR_RECV_FAILED_READING_NAME_LENGTH,
-  ERROR_RECV_FAILED_READING_FILENAME,
-  ERROR_RECV_FAILED_READING_FILE_LENGTH,
-  ERROR_FAILED_TO_CREATE_DESTINATION_FILE,
-  ERROR_RECV_FAILED_READING_FILE_DATA,
-  ERROR_WRITE_FAILED_WRITING_FILE_DATA
-} error_t;
+#include <netinet/in.h>
 
-static const int BLOCK_SIZE = 8192;
-static const int NETWORK_PORT = 6969;
+int
+util_getSockAddr(const char * host, int port, struct sockaddr_in * addr);
+
+const char*
+util_getErrorString(uint32_t error);
+
+int
+squirt_cli(int argc, char* argv[]);
+
+int
+squirt_suck(int argc, char* argv[]);
+
+int
+squirt(int argc, char* argv[]);

@@ -1,14 +1,42 @@
-all: squirt squirtd.amiga squirtd.unix
-CFLAGS=-fsanitize=address -fsanitize=undefined -O2 -Wall
+SQUIRTD_SRCS=squirtd.c squirtd_exec.c
+SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_main.c util.c
 
-squirt: squirt.c squirt.h Makefile
-	gcc $(CFLAGS) squirt.c -o squirt -lncurses
+DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined
+CFLAGS=$(DEBUG_CFLAGS) -Os  -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
+VBCC_CFLAGS=-O1 -DAMIGA +aos68k -c99
 
-squirtd.unix: squirtd.c squirt.h Makefile
-	gcc $(CFLAGS) squirtd.c -o squirtd.unix
+SQUIRTD_AMIGA_OBJS=$(addprefix build/obj/amiga/, $(SQUIRTD_SRCS:.c=.o))
+SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
+SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
-squirtd.amiga: squirtd.c squirt.h Makefile
-	vc -O1 -DAMIGA -static -c99 +aos68k squirtd.c -o squirtd.amiga -lauto
+all: build/squirt_exec build/squirt_suck build/squirt build/squirtd build/amiga/squirtd
+
+build/squirt: $(SQUIRT_OBJS)
+	gcc $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt -lncurses
+
+build/squirt_exec: $(SQUIRT_OBJS)
+	gcc $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_exec -lncurses
+
+build/squirt_suck: $(SQUIRT_OBJS)
+	gcc $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_suck -lncurses
+
+build/squirtd: $(SQUIRTD_OBJS)
+	gcc $(CFLAGS) $(SQUIRTD_OBJS) -o build/squirtd
+
+build/obj/%.o: %.c squirt.h common.h squirtd.h Makefile
+	@mkdir -p build/obj
+	gcc -c $(CFLAGS) $*.c -o build/obj/$*.o
+
+build/obj/amiga/%.o: %.c squirt.h common.h squirtd.h Makefile
+	@mkdir -p build/obj/amiga
+	vc -c $(VBCC_CFLAGS) $*.c -c -o build/obj/amiga/$*.o
+
+build/amiga/squirtd: $(SQUIRTD_AMIGA_OBJS)
+	@mkdir -p build/amiga
+	vc $(VBCC_CFLAGS) $(SQUIRTD_AMIGA_OBJS) -o build/amiga/squirtd -lauto
+
+install: all
+	cp build/squirt build/squirt_exec build/squirt_suck /usr/local/bin/
 
 clean:
-	rm -f squirt squirtd.unix squirtd.amiga
+	rm -rf build

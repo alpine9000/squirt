@@ -19,9 +19,8 @@
 
 static int socketFd = 0;
 static int fileFd = 0;
-static int screenWidth;
 static char* readBuffer = 0;
-
+static int screenWidth;
 
 static void
 cleanupAndExit(void)
@@ -43,6 +42,7 @@ cleanupAndExit(void)
 
   exit(0);
 }
+
 
 static void
 fatalError(const char *format, ...)
@@ -70,7 +70,7 @@ printFormatSpeed(int32_t size, double elapsed)
 
 
 static void
-printProgress(struct timeval* start, int total, int fileLength)
+printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
 {
   int percentage = (total*100)/fileLength;
   int barWidth = screenWidth - 20;
@@ -109,27 +109,31 @@ getWindowSize(void)
 }
 
 
-int
-squirt(int argc, char* argv[])
+static const char*
+amigaBaseName(const char* filename)
 {
-  int total = 0;
-  int32_t fileLength;
-  struct stat st;
+  int i;
+  for (i = strlen(filename)-1; i > 0 && filename[i] != '/' && filename[i] != ':'; --i);
+  if (i > 0) {
+    return &filename[i+1];
+  } else {
+    return filename;
+  }
+}
+
+
+int
+squirt_suck(int argc, char* argv[])
+{
+  uint32_t total = 0;
   struct sockaddr_in sockAddr;
   struct timeval start, end;
-  const char* fullPathname;
 
   if (argc != 3) {
     fatalError("usage: %s hostname filename\n", argv[0]);
   }
 
-  fullPathname = argv[2];
-
-  if (stat(fullPathname, &st) == -1) {
-    fatalError("%s: filed to stat %s\n", argv[0], fullPathname);
-  }
-
-  fileLength = st.st_size;
+  const char* filename = argv[2];
 
   setlocale(LC_NUMERIC, "");
   getWindowSize();
@@ -146,49 +150,59 @@ squirt(int argc, char* argv[])
     fatalError("connect() failed\n");
   }
 
-  uint8_t commandCode = SQUIRT_COMMAND_SQUIRT;
+  uint8_t commandCode = SQUIRT_COMMAND_SUCK;
+
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed\n");
   }
 
-  const char* filename = basename((char*)fullPathname);
-  int32_t nameLength = strlen(filename);
-  int32_t networkNameLength = htonl(nameLength);
+  uint32_t nameLength = strlen(filename);
+  uint32_t networkNameLength = htonl(nameLength);
 
   if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
     fatalError("send() nameLength failed\n");
   }
 
+
   if (send(socketFd, filename, nameLength, 0) != nameLength) {
-    fatalError("send() name failed\n");
+    fatalError("send() filename failed\n");
   }
 
-  int32_t networkFileLength = htonl(fileLength);
+  uint32_t networkFileLength;
 
-  if (send(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
-    fatalError("send() fileLength failed\n");
+  if (recv(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(networkFileLength)) {
+    fatalError("recv() fileLength failed\n");
   }
 
-  fileFd = open(fullPathname, O_RDONLY);
+  uint32_t fileLength = ntohl(networkFileLength);
+  const char* baseName = amigaBaseName(filename);
+
+  if (fileLength == 0) {
+    fatalError("%s: failed to suck file %s\n", argv[0], filename);
+  }
+
+  fileFd = open(baseName, O_WRONLY|O_CREAT, 0777);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", argv[0], fullPathname);
+    fatalError("%s: failed to open %s\n", argv[0], baseName);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("squirting %s (%'d bytes)\n", filename, fileLength);
+  printf("sucking %s (%'d bytes)\n", filename, fileLength);
+
+  fflush(stdout);
 
   gettimeofday(&start, NULL);
 
   do {
     int len;
-    if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read %s\n", argv[0], fullPathname);
+    if ((len = read(socketFd, readBuffer, BLOCK_SIZE) ) < 0) {
+      fatalError("%s failed to read\n", argv[0]);
     } else {
       printProgress(&start, total, fileLength);
-      if (send(socketFd, readBuffer, len, 0) != len) {
-	fatalError("send() failed\n");
+      if (write(fileFd, readBuffer, len) != len) {
+	fatalError("%s failed to write to %s\n", argv[0], baseName);
       }
       total += len;
     }
@@ -197,24 +211,13 @@ squirt(int argc, char* argv[])
 
   printProgress(&start, total, fileLength);
 
-  uint32_t error;
+  gettimeofday(&end, NULL);
+  long seconds = end.tv_sec - start.tv_sec;
+  long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
+  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", filename, baseName, fileLength, ((double)micros)/1000000.0f);
+  printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
+  printf("\n");
 
-  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-    fatalError("failed to read remote status\n");
-  }
-
-  error = ntohl(error);
-
-  if (ntohl(error) == 0) {
-    gettimeofday(&end, NULL);
-    long seconds = end.tv_sec - start.tv_sec;
-    long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-    printf("\nsquirted %s (%'d bytes) in %0.02f seconds ", filename, fileLength, ((double)micros)/1000000.0f);
-    printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
-    printf("\n");
-  } else {
-    fprintf(stderr, "\n**FAILED** to squirt %s\n%s\n", filename, util_getErrorString(error));
-  }
 
   cleanupAndExit();
 
