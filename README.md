@@ -12,7 +12,7 @@ There are no passwords, no server side validations and transfers are plain text.
 
     squirtd destination_folder
 
-Note: `destination folder` must end with a valid directory separator character as the filename is simply appended to `destination folder`. 
+Note: `destination folder` must end with a valid directory separator character as the filename is simply appended to `destination folder`.
 
 For example:
 
@@ -26,9 +26,9 @@ It's easy to run `squirtd` on your Amiga as a background daemon, just start it f
 Add the following to AmiTCP:db/User-Startnet.
 
     run >NIL: aux:squirtd Work:Incoming/
-    
+
 where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
-    
+
 ### Roadshow
 Add the following to S:Network-Startup.
 
@@ -40,10 +40,10 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 
 client usage is as follows:
 
-    squirt filename hostname
+    squirt hostname filename
 
 See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 with an XSurf-500.
 
-![](demo.gif)
+![](images/demo.gif)
 
-![](aca500plus.png)
+![](images/aca500plus.png)
