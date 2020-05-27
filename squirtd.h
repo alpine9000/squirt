@@ -21,5 +21,7 @@ typedef int32_t LONG;
 #define MODE_NEWFILE (O_WRONLY|O_CREAT)
 #endif
 
-uint32_t exec_run(const char* command, int socketFd);
-uint32_t exec_cd(const char* dir, int socketFd);
+extern uint32_t squirtd_error;
+void exec_run(const char* command, int socketFd);
+void exec_cd(const char* dir, int socketFd);
+void exec_dir(const char* dir, int socketFd);

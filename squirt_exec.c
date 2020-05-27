@@ -21,14 +21,14 @@
 static int socketFd = 0;
 
 static void
-cleanupAndExit(void)
+cleanupAndExit(int errorCode)
 {
   if (socketFd) {
     close(socketFd);
     socketFd = 0;
   }
 
-  exit(0);
+  exit(errorCode);
 }
 
 
@@ -39,7 +39,7 @@ fatalError(const char *format, ...)
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
-  cleanupAndExit();
+  cleanupAndExit(EXIT_FAILURE);
 }
 
 int
@@ -123,11 +123,11 @@ squirt_cli(int argc, char* argv[])
   error = ntohl(error);
 
   if (ntohl(error) != 0) {
-    fprintf(stderr, "\nerror: %s\n", util_getErrorString(error));
+    fatalError("%s: %s\n", argv[0], util_getErrorString(error));
   }
 
 
-  cleanupAndExit();
+  cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }

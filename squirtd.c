@@ -17,6 +17,7 @@
 #include "squirtd.h"
 
 
+uint32_t squirtd_error;
 static int socketFd = 0;
 static int acceptFd = 0;
 static char* filename = 0;
@@ -77,7 +78,7 @@ _fatalError(const char *msg)
 {
   fprintf(stderr, "%s", msg);
   cleanup();
-  exit(0);
+  exit(1);
 }
 
 int16_t
@@ -89,14 +90,14 @@ file_get(const char* destFolder, uint32_t nameLength)
   strcpy(filename, destFolder);
 
   if (recv(acceptFd, filename+destFolderLen, nameLength, 0) != nameLength) {
-    return ERROR_RECV_FAILED_READING_FILENAME;
+    return ERROR_RECV_FAILED;
   }
 
   filename[fullPathLen] = 0;
 
   int32_t fileLength;
   if (recv(acceptFd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
-    return  ERROR_RECV_FAILED_READING_FILE_LENGTH;
+    return  ERROR_RECV_FAILED;
   }
 
   fileLength = ntohl(fileLength);
@@ -104,19 +105,19 @@ file_get(const char* destFolder, uint32_t nameLength)
   DeleteFile(filename);
 
   if ((outputFd = Open(filename, MODE_NEWFILE)) == 0) {
-    return ERROR_FAILED_TO_CREATE_DESTINATION_FILE;
+    return ERROR_CREATE_FILE_FAILED;
   }
 
   rxBuffer = malloc(BLOCK_SIZE);
   int total = 0, timeout = 0, length;
   do {
     if ((length = recv(acceptFd, (void*)rxBuffer, BLOCK_SIZE, 0)) < 0) {
-      return ERROR_RECV_FAILED_READING_FILE_DATA;
+      return ERROR_RECV_FAILED;
     }
     if (length) {
       total += length;
       if (Write(outputFd, rxBuffer, length) != length) {
-	return ERROR_WRITE_FAILED_WRITING_FILE_DATA;
+	return ERROR_FILE_WRITE_FAILED;
       }
       timeout = 0;
     } else {
@@ -134,9 +135,11 @@ int16_t
 file_send(void)
 {
 #ifdef AMIGA
+  printf("sending %s\n", filename);
+
   BPTR lock = Lock(filename, ACCESS_READ);
   if (!lock) {
-    return ERROR_FAILED_TO_READ_FILE;
+    return ERROR_FILE_READ_FAILED;
   }
 
   struct FileInfoBlock fileInfo;
@@ -146,13 +149,18 @@ file_send(void)
   uint32_t fileNameLength = strlen(filename);
 
   if (send(acceptFd, (void*)&fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
-    return ERROR_SEND_FAILED_WRITING_SIZE;
+    return ERROR_SEND_FAILED;
+  }
+
+  if (fileSize == 0) {
+    return 0;
   }
 
   inputFd = Open(filename, MODE_OLDFILE);
 
   if (!inputFd) {
-    return ERROR_FAILED_TO_READ_FILE;
+    printf("open failed %s\n", filename);
+    return ERROR_FILE_READ_FAILED;
   }
 
   rxBuffer = malloc(BLOCK_SIZE);
@@ -161,10 +169,10 @@ file_send(void)
   do {
     int len;
     if ((len = Read(inputFd, rxBuffer, BLOCK_SIZE) ) < 0) {
-      return ERROR_FAILED_TO_READ_FILE;
+      return ERROR_FILE_READ_FAILED;
     } else {
       if (send(acceptFd, rxBuffer, len, 0) != len) {
-	  return ERROR_SEND_FAILED_WRITING_DATA;
+	  return ERROR_SEND_FAILED;
       }
       total += len;
     }
@@ -202,12 +210,11 @@ main(int argc, char **argv)
     fatalError("listen() failed\n");
   }
 
-  int32_t error;
 
  again:
   printf("restarting\n");
 
-  error = 0;
+  squirtd_error = 0;
 
   if ((acceptFd = accept(socketFd, 0, 0)) == -1) {
     fatalError("accept() failed\n");
@@ -218,13 +225,13 @@ main(int argc, char **argv)
 
   uint8_t command;
   if (recv(acceptFd, (void*)&command, sizeof(command), 0) != sizeof(command)) {
-    error = ERROR_RECV_FAILED_READING_COMMAND;
+    squirtd_error = ERROR_RECV_FAILED;
     goto cleanup;
   }
 
   uint32_t nameLength;
   if (recv(acceptFd, (void*)&nameLength, sizeof(nameLength), 0) != sizeof(nameLength)) {
-    error = ERROR_RECV_FAILED_READING_NAME_LENGTH;
+    squirtd_error = ERROR_RECV_FAILED;
     goto cleanup;
   }
 
@@ -234,30 +241,32 @@ main(int argc, char **argv)
     filename = malloc(nameLength+1);
 
     if (recv(acceptFd, filename, nameLength, 0) != nameLength) {
-      error = ERROR_RECV_FAILED_READING_FILENAME;
+      squirtd_error = ERROR_RECV_FAILED;
       goto cleanup;
     }
 
     filename[nameLength] = 0;
 
     if (command == SQUIRT_COMMAND_CLI) {
-      error = exec_run(filename, acceptFd);
+      exec_run(filename, acceptFd);
     } else if (command == SQUIRT_COMMAND_CD) {
-      error = exec_cd(filename, acceptFd);
+      exec_cd(filename, acceptFd);
     } else if (command == SQUIRT_COMMAND_SUCK) {
       file_send();
+    } else if (command == SQUIRT_COMMAND_DIR) {
+      exec_dir(filename, acceptFd);
     }
     goto cleanup;
   } else {
-    error = file_get(argv[1], nameLength);
-    if (error) {
+    squirtd_error = file_get(argv[1], nameLength);
+    if (squirtd_error) {
       goto cleanup;
     }
   }
 
  cleanup:
-  error = htonl(error);
-  send(acceptFd, (void*)&error, sizeof(error), 0);
+  squirtd_error = htonl(squirtd_error);
+  send(acceptFd, (void*)&squirtd_error, sizeof(squirtd_error), 0);
   cleanupForNextRun();
 
   goto again;

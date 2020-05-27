@@ -23,7 +23,7 @@ static char* readBuffer = 0;
 static int screenWidth;
 
 static void
-cleanupAndExit(void)
+cleanup(void)
 {
   if (readBuffer) {
     free(readBuffer);
@@ -39,7 +39,12 @@ cleanupAndExit(void)
     close(fileFd);
     fileFd = 0;
   }
+}
 
+static void
+cleanupAndExit(void)
+{
+  cleanup();
   exit(0);
 }
 
@@ -72,7 +77,13 @@ printFormatSpeed(int32_t size, double elapsed)
 static void
 printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
 {
-  int percentage = (total*100)/fileLength;
+  int percentage;
+
+  if (fileLength) {
+    percentage = (total*100)/fileLength;
+  } else {
+    percentage = 100;
+  }
   int barWidth = screenWidth - 20;
   int screenPercentage = (percentage*barWidth)/100;
   struct timeval current;
@@ -115,30 +126,22 @@ amigaBaseName(const char* filename)
   int i;
   for (i = strlen(filename)-1; i > 0 && filename[i] != '/' && filename[i] != ':'; --i);
   if (i > 0) {
-    return &filename[i+1];
-  } else {
-    return filename;
+    filename = &filename[i+1];
   }
+  return util_latin1ToUtf8(filename);
 }
 
-
-int
-squirt_suck(int argc, char* argv[])
+void
+squirt_suckFile(const char* hostname, const char* filename)
 {
   uint32_t total = 0;
   struct sockaddr_in sockAddr;
   struct timeval start, end;
 
-  if (argc != 3) {
-    fatalError("usage: %s hostname filename\n", argv[0]);
-  }
-
-  const char* filename = argv[2];
-
   setlocale(LC_NUMERIC, "");
   getWindowSize();
 
-  if (!util_getSockAddr(argv[1], NETWORK_PORT, &sockAddr)) {
+  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
   }
 
@@ -178,46 +181,77 @@ squirt_suck(int argc, char* argv[])
   const char* baseName = amigaBaseName(filename);
 
   if (fileLength == 0) {
-    fatalError("%s: failed to suck file %s\n", argv[0], filename);
+    //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
   }
 
+  char* utf8Filename = util_latin1ToUtf8(filename);
+  printf("opening %s %s\n", baseName, utf8Filename);
   fileFd = open(baseName, O_WRONLY|O_CREAT, 0777);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", argv[0], baseName);
+    fatalError("%s: failed to open %s\n", squirt_argv0, baseName);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("sucking %s (%'d bytes)\n", filename, fileLength);
+  printf("sucking %s (%'d bytes)\n", utf8Filename, fileLength);
 
   fflush(stdout);
 
   gettimeofday(&start, NULL);
 
-  do {
-    int len;
-    if ((len = read(socketFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read\n", argv[0]);
-    } else {
-      printProgress(&start, total, fileLength);
-      if (write(fileFd, readBuffer, len) != len) {
-	fatalError("%s failed to write to %s\n", argv[0], baseName);
+  if (fileLength) {
+    do {
+      int len, requestLength;
+      if (fileLength - total > BLOCK_SIZE) {
+	requestLength = BLOCK_SIZE;
+      } else {
+	requestLength = fileLength - total;
       }
-      total += len;
-    }
-
-  } while (total < fileLength);
+      if ((len = read(socketFd, readBuffer, requestLength) ) < 0) {
+	fflush(stdout);
+	fatalError("\n%s failed to read\n", squirt_argv0);
+      } else {
+	printProgress(&start, total, fileLength);
+	int readLen;
+	if ((readLen = write(fileFd, readBuffer, len)) != len) {
+	  fflush(stdout);
+	  fatalError("\n%s failed to write to %s %d\n", squirt_argv0, baseName, readLen);
+	}
+	total += len;
+      }
+    } while (total < fileLength);
+  }
 
   printProgress(&start, total, fileLength);
+
+  //  uint32_t error;
+
+  //if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+  // fatalError("%s: failed to read remote status\n", squirt_argv0);
+  //}
 
   gettimeofday(&end, NULL);
   long seconds = end.tv_sec - start.tv_sec;
   long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", filename, baseName, fileLength, ((double)micros)/1000000.0f);
+  char* utf8 = util_latin1ToUtf8(filename);
+  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", utf8, baseName, fileLength, ((double)micros)/1000000.0f);
   printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
   printf("\n");
 
+  free((void*)baseName);
+  free((void*)utf8);
+  cleanup();
+}
+
+int
+squirt_suck(int argc, char* argv[])
+{
+  if (argc != 3) {
+    fatalError("usage: %s hostname filename\n", squirt_argv0);
+  }
+
+  squirt_suckFile(argv[1], argv[2]);
 
   cleanupAndExit();
 

@@ -24,7 +24,7 @@ static char* readBuffer = 0;
 
 
 static void
-cleanupAndExit(void)
+cleanupAndExit(uint32_t exitCode)
 {
   if (readBuffer) {
     free(readBuffer);
@@ -41,7 +41,7 @@ cleanupAndExit(void)
     fileFd = 0;
   }
 
-  exit(0);
+  exit(exitCode);
 }
 
 static void
@@ -51,7 +51,7 @@ fatalError(const char *format, ...)
   va_start(args, format);
   vfprintf(stderr, format, args);
   va_end(args);
-  cleanupAndExit();
+  cleanupAndExit(EXIT_FAILURE);
 }
 
 
@@ -120,13 +120,13 @@ squirt(int argc, char* argv[])
   const char* fullPathname;
 
   if (argc != 3) {
-    fatalError("usage: %s hostname filename\n", argv[0]);
+    fatalError("usage: %s hostname filename\n", squirt_argv0);
   }
 
   fullPathname = argv[2];
 
   if (stat(fullPathname, &st) == -1) {
-    fatalError("%s: filed to stat %s\n", argv[0], fullPathname);
+    fatalError("%s: filed to stat %s\n", squirt_argv0, fullPathname);
   }
 
   fileLength = st.st_size;
@@ -152,15 +152,20 @@ squirt(int argc, char* argv[])
   }
 
   const char* filename = basename((char*)fullPathname);
-  int32_t nameLength = strlen(filename);
-  int32_t networkNameLength = htonl(nameLength);
+  {
+    const char* latin1Filename = util_utf8ToLatin1(filename);
+    int32_t nameLength = strlen(latin1Filename);
+    int32_t networkNameLength = htonl(nameLength);
 
-  if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
-    fatalError("send() nameLength failed\n");
-  }
+    if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
+      fatalError("send() nameLength failed\n");
+    }
 
-  if (send(socketFd, filename, nameLength, 0) != nameLength) {
-    fatalError("send() name failed\n");
+    if (send(socketFd, latin1Filename, nameLength, 0) != nameLength) {
+      fatalError("send() name failed\n");
+    }
+
+    free((void*)latin1Filename);
   }
 
   int32_t networkFileLength = htonl(fileLength);
@@ -172,7 +177,7 @@ squirt(int argc, char* argv[])
   fileFd = open(fullPathname, O_RDONLY);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", argv[0], fullPathname);
+    fatalError("%s: failed to open %s\n", squirt_argv0, fullPathname);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
@@ -184,7 +189,7 @@ squirt(int argc, char* argv[])
   do {
     int len;
     if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read %s\n", argv[0], fullPathname);
+      fatalError("%s failed to read %s\n", squirt_argv0, fullPathname);
     } else {
       printProgress(&start, total, fileLength);
       if (send(socketFd, readBuffer, len, 0) != len) {
@@ -216,7 +221,7 @@ squirt(int argc, char* argv[])
     fprintf(stderr, "\n**FAILED** to squirt %s\n%s\n", filename, util_getErrorString(error));
   }
 
-  cleanupAndExit();
+  cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }

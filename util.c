@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h>
+#include <iconv.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 
 #include "squirt.h"
@@ -9,22 +11,47 @@
 
 static const char* errors[] = {
   [ERROR_SUCCESS] = "Unknown error",
-  [ERROR_RECV_FAILED_READING_COMMAND] = "recv() failed reading command",
-  [ERROR_RECV_FAILED_READING_NAME_LENGTH] = "recv() failed reading name length",
-  [ERROR_RECV_FAILED_READING_FILENAME] = "recv() failed reading filename",
-  [ERROR_RECV_FAILED_READING_FILE_LENGTH] = "recv() failed reading file length",
-  [ERROR_FAILED_TO_CREATE_DESTINATION_FILE] = "Failed to create destination file",
-  [ERROR_RECV_FAILED_READING_FILE_DATA] = "recv() failed reading file data",
-  [ERROR_WRITE_FAILED_WRITING_FILE_DATA] = "Write() failed writing file data",
-  [ERROR_FAILED_TO_READ_FILE] = "failed to read file",
-  [ERROR_SEND_FAILED_WRITING_FILENAME_LENGTH] = "send failed writing filename length",
-  [ERROR_SEND_FAILED_WRITING_FILENAME] = "send failed writing filename",
-  [ERROR_SEND_FAILED_WRITING_DATA] = "send failed writing data",
-  [ERROR_SEND_FAILED_WRITING_SIZE] = "send failed writing size",
+  [ERROR_RECV_FAILED] = "recv failed",
+  [ERROR_SEND_FAILED] = "send failed",
+  [ERROR_CREATE_FILE_FAILED] = "create file failed",
+  [ERROR_FILE_WRITE_FAILED] = "file write failed",
+  [ERROR_FILE_READ_FAILED] = "file read failed",
   [ERROR_CD_FAILED] = "cd failed",
-  [ERROR_PIPE_OPEN_FAILED] = "pipe open failed",
-  [ERROR_EXEC_FAILED] = "failed to create system shell",
+  [ERROR_FAILED_TO_CREATE_OS_RESOURCE] = "failed to create os resource",
+  [ERROR_EXEC_FAILED] = "exec failed",
 };
+
+char*
+util_utf8ToLatin1(const char* buffer)
+{
+  iconv_t ic = iconv_open("ISO-8859-1", "UTF-8");
+  size_t insize = strlen(buffer);
+  char* inptr = (char*)buffer;
+  size_t outsize = (insize)+1;
+  char* out = calloc(1, outsize);
+  char* outptr = out;
+  iconv(ic, &inptr, &insize, &outptr, &outsize);
+  iconv_close(ic);
+  return out;
+}
+
+char*
+util_latin1ToUtf8(const char* _buffer)
+{
+  iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
+  char* buffer = malloc(strlen(_buffer)+1);
+  strcpy(buffer, _buffer);
+  size_t insize = strlen(buffer);
+  char* inptr = (char*)buffer;
+  size_t outsize = (insize*2)+1;
+  char* out = calloc(1, outsize);
+  char* outptr = out;
+  iconv(ic, &inptr, &insize, &outptr, &outsize);
+  iconv_close(ic);
+  free(buffer);
+  return out;
+}
+
 
 const char*
 util_getErrorString(uint32_t error)
