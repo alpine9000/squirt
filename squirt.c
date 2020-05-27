@@ -152,20 +152,9 @@ squirt(int argc, char* argv[])
   }
 
   const char* filename = basename((char*)fullPathname);
-  {
-    const char* latin1Filename = util_utf8ToLatin1(filename);
-    int32_t nameLength = strlen(latin1Filename);
-    int32_t networkNameLength = htonl(nameLength);
 
-    if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
-      fatalError("send() nameLength failed\n");
-    }
-
-    if (send(socketFd, latin1Filename, nameLength, 0) != nameLength) {
-      fatalError("send() name failed\n");
-    }
-
-    free((void*)latin1Filename);
+  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
+    fatalError("%s send() name failed\n", squirt_argv0);
   }
 
   int32_t networkFileLength = htonl(fileLength);

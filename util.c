@@ -21,7 +21,7 @@ static const char* errors[] = {
   [ERROR_EXEC_FAILED] = "exec failed",
 };
 
-char*
+static char*
 util_utf8ToLatin1(const char* buffer)
 {
   iconv_t ic = iconv_open("ISO-8859-1", "UTF-8");
@@ -35,7 +35,7 @@ util_utf8ToLatin1(const char* buffer)
   return out;
 }
 
-char*
+static char*
 util_latin1ToUtf8(const char* _buffer)
 {
   iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
@@ -43,7 +43,7 @@ util_latin1ToUtf8(const char* _buffer)
   strcpy(buffer, _buffer);
   size_t insize = strlen(buffer);
   char* inptr = (char*)buffer;
-  size_t outsize = (insize*2)+1;
+  size_t outsize = (insize*4)+1;
   char* out = calloc(1, outsize);
   char* outptr = out;
   iconv(ic, &inptr, &insize, &outptr, &outsize);
@@ -52,6 +52,39 @@ util_latin1ToUtf8(const char* _buffer)
   return out;
 }
 
+
+int
+util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str)
+{
+  int success = 1;
+  char* latin1 = util_utf8ToLatin1(str);
+  uint32_t length = strlen(latin1);
+  uint32_t networkLength = htonl(length);
+
+  if (send(socketFd, &networkLength, sizeof(networkLength), 0) == sizeof(networkLength)) {
+    success = send(socketFd, latin1, length, 0) == length;
+  }
+
+  free(latin1);
+  return success;
+}
+
+char*
+util_recvLatin1AsUtf8(int socketFd, uint32_t length)
+{
+  char* buffer = malloc(length+1);
+
+  if (recv(socketFd, buffer, length, 0) != length) {
+    free(buffer);
+    return 0;
+  }
+
+  buffer[length] = 0;
+
+  char* utf8 = util_latin1ToUtf8(buffer);
+  free(buffer);
+  return utf8;
+}
 
 const char*
 util_getErrorString(uint32_t error)

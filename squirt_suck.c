@@ -128,7 +128,7 @@ amigaBaseName(const char* filename)
   if (i > 0) {
     filename = &filename[i+1];
   }
-  return util_latin1ToUtf8(filename);
+  return filename;
 }
 
 void
@@ -159,16 +159,17 @@ squirt_suckFile(const char* hostname, const char* filename)
     fatalError("send() commandCode failed\n");
   }
 
+#if 0
   uint32_t nameLength = strlen(filename);
   uint32_t networkNameLength = htonl(nameLength);
 
   if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
     fatalError("send() nameLength failed\n");
   }
+#endif
 
-
-  if (send(socketFd, filename, nameLength, 0) != nameLength) {
-    fatalError("send() filename failed\n");
+  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
+    fatalError("%s: send() filename failed\n", squirt_argv0);
   }
 
   uint32_t networkFileLength;
@@ -184,8 +185,7 @@ squirt_suckFile(const char* hostname, const char* filename)
     //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
   }
 
-  char* utf8Filename = util_latin1ToUtf8(filename);
-  printf("opening %s %s\n", baseName, utf8Filename);
+  printf("opening %s %s\n", baseName, filename);
   fileFd = open(baseName, O_WRONLY|O_CREAT, 0777);
 
   if (!fileFd) {
@@ -194,7 +194,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("sucking %s (%'d bytes)\n", utf8Filename, fileLength);
+  printf("sucking %s (%'d bytes)\n", filename, fileLength);
 
   fflush(stdout);
 
@@ -225,22 +225,14 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   printProgress(&start, total, fileLength);
 
-  //  uint32_t error;
-
-  //if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-  // fatalError("%s: failed to read remote status\n", squirt_argv0);
-  //}
 
   gettimeofday(&end, NULL);
   long seconds = end.tv_sec - start.tv_sec;
   long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-  char* utf8 = util_latin1ToUtf8(filename);
-  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", utf8, baseName, fileLength, ((double)micros)/1000000.0f);
+  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", filename, baseName, fileLength, ((double)micros)/1000000.0f);
   printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
   printf("\n");
 
-  free((void*)baseName);
-  free((void*)utf8);
   cleanup();
 }
 

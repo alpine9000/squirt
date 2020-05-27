@@ -5,10 +5,10 @@
 extern const char* squirt_argv0;
 
 char*
-util_utf8ToLatin1(const char* buffer);
+util_recvLatin1AsUtf8(int socketFd, uint32_t length);
 
-char*
-util_latin1ToUtf8(const char* buffer);
+int
+util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str);
 
 int
 util_getSockAddr(const char * host, int port, struct sockaddr_in * addr);

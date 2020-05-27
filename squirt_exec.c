@@ -92,14 +92,8 @@ squirt_cli(int argc, char* argv[])
     fatalError("send() commandCode failed\n");
   }
 
-  int32_t networkCommandLength = htonl(commandLength);
-
-  if (send(socketFd, &networkCommandLength, sizeof(networkCommandLength), 0) != sizeof(commandLength)) {
-    fatalError("send() nameLength failed\n");
-  }
-
-  if (send(socketFd, command, commandLength, 0) != commandLength) {
-    fatalError("send() command failed\n");
+  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
+    fatalError("%s: send() command failed\n", squirt_argv0);
   }
 
   uint8_t c;

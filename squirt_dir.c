@@ -166,13 +166,11 @@ getDirEntry(dir_entry_list_t* entryList)
 
   type = ntohl(type);
 
-  char* buffer = malloc(nameLength+1);
+  char* buffer = util_recvLatin1AsUtf8(socketFd, nameLength);
 
-  if (recv(socketFd, buffer, nameLength, 0) != nameLength) {
+  if (!buffer) {
     fatalError("%s: failed to read name (%d bytes)\n", squirt_argv0, nameLength);
   }
-
-  buffer[nameLength] = 0;
 
   uint32_t fileSize;
 
@@ -194,12 +192,10 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
 {
   struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_DIR;
-  int commandLength = 0;
 
   setlocale(LC_NUMERIC, "");
   setlocale(LC_ALL, "");
 
-  commandLength = strlen(command);
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
@@ -217,14 +213,8 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
     fatalError("send() commandCode failed\n");
   }
 
-  int32_t networkCommandLength = htonl(commandLength);
-
-  if (send(socketFd, &networkCommandLength, sizeof(networkCommandLength), 0) != sizeof(commandLength)) {
-    fatalError("send() nameLength failed\n");
-  }
-
-  if (send(socketFd, command, commandLength, 0) != commandLength) {
-    fatalError("send() command failed\n");
+  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
+    fatalError("%s send() command failed\n", squirt_argv0);
   }
 
   uint32_t more;
@@ -263,7 +253,6 @@ squirt_cd(const char* dir)
 {
   struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_CD;
-  uint32_t commandLength = strlen(dir);
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
@@ -277,19 +266,12 @@ squirt_cd(const char* dir)
     fatalError("connect() failed\n");
   }
 
-
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed\n");
   }
 
-  int32_t networkCommandLength = htonl(commandLength);
-
-  if (send(socketFd, &networkCommandLength, sizeof(networkCommandLength), 0) != sizeof(commandLength)) {
-    fatalError("send() nameLength failed\n");
-  }
-
-  if (send(socketFd, dir, commandLength, 0) != commandLength) {
-    fatalError("send() command failed\n");
+  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, dir)) {
+    fatalError("%s send() command failed\n", squirt_argv0);
   }
 
   uint8_t c;
@@ -330,13 +312,28 @@ fullPath(const char* name)
   return path;
 }
 
+static char*
+safeName(const char* name)
+{
+  char* safe = malloc(strlen(name)+1);
+  char* dest = safe;
+  while (*name) {
+    if (*name != ':') {
+      *dest = *name;
+      dest++;
+    }
+    name++;
+  }
+  *dest = 0;
 
-static void
+  return safe;
+}
+
+
+static char*
 pushDir(const char* dir)
 {
   if (currentDir) {
-    // char* newDir = malloc(strlen(currentDir) + 1 + strlen(dir) + 1);
-    //sprintf(newDir, "%s/%s", currentDir, dir);
     char* newDir = fullPath(dir);
     if (currentDir) {
       free(currentDir);
@@ -348,10 +345,27 @@ pushDir(const char* dir)
   }
 
   squirt_cd(currentDir);
+
+  char* safe = safeName(dir);
+  int mkdirResult = mkdir(safe, 0777);
+
+  if (mkdirResult != 0 && errno != EEXIST) {
+    fatalError("%s: failed to mkdir %s\n", squirt_argv0, safe);
+  }
+
+  char* cwd = getcwd(0, 0);
+
+  if (chdir(safe) == -1) {
+    fatalError("%s: unable to chdir to %s\n", squirt_argv0, safe);
+  }
+
+  free(safe);
+
+  return cwd;
 }
 
 static void
-popDir(void)
+popDir(char* cwd)
 {
   for (int i = strlen(currentDir)-1; i >= 0; --i) {
     if (currentDir[i] == '/' || (i > 0 && currentDir[i-1] == ':')) {
@@ -359,6 +373,9 @@ popDir(void)
       break;
     }
   }
+
+  chdir(cwd);
+  free((void*)cwd);
 }
 
 
@@ -370,10 +387,8 @@ backupList(dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      char* utf8 = util_latin1ToUtf8(entry->name);
       struct stat st;
-      int s = stat(utf8, &st);
-      free(utf8);
+      int s = stat(entry->name, &st);
       if (s != -1 && st.st_size == entry->size) {
 	fflush(stdout);
 	//printf("skipping file %s (local copy exists)\n", path);
@@ -397,52 +412,17 @@ backupList(dir_entry_list_t* list)
   }
 }
 
-static char*
-safeName(const char* name)
-{
-  char* safe = malloc(strlen(name)+1);
-  strcpy(safe, name);
-  for (unsigned int i = 0; i < strlen(safe); i++) {
-    if (safe[i] == ':') {
-      safe[i] = '_';
-    }
-  }
-  char* utf8 = util_latin1ToUtf8(safe);
-  free(safe);
-  return utf8;
-}
 
 static void
 squirt_backupDir(const char* dir)
 {
-  pushDir(dir);
+  printf("\nbacking up dir %s", dir);
 
-  char* utf8 = util_latin1ToUtf8(currentDir);
-  printf("\nbacking up dir %s", utf8);
-  free(utf8);
-
-  char* safe = safeName(dir);
-  int mkdirResult = mkdir(safe, 0777);
-
-  if (mkdirResult != 0 && errno != EEXIST) {
-    fatalError("%s: failed to mkdir %s\n", squirt_argv0, safe);
-  }
-
-  const char* cwd = getcwd(0, 0);
-
-  if (chdir(safe) == -1) {
-    fatalError("%s: unable to chdir to %s\n", squirt_argv0, safe);
-  }
-
-  free(safe);
+  char* cwd = pushDir(dir);
 
   squirt_processDir(currentDir, backupList);
 
-  popDir();
-
-  chdir(cwd);
-  free((void*)cwd);
-
+  popDir(cwd);
 }
 
 
@@ -464,7 +444,6 @@ squirt_dir(int argc, char* argv[])
   return 0;
 }
 
-
 int
 squirt_backup(int argc, char* argv[])
 {
@@ -476,7 +455,36 @@ squirt_backup(int argc, char* argv[])
 
   hostname = argv[1];
 
-  squirt_backupDir(argv[2]);
+  char* path = argv[2];
+  char* token = strtok(path, ":");
+  char* dir = 0;
+  if (token) {
+    dir = token;
+    token = strtok(0, "/");
+    if (token) {
+      char* buffer = malloc(strlen(dir)+2);
+      sprintf(buffer, "%s:", dir);
+      pushDir(buffer);
+      free(buffer);
+      do {
+	dir = token;
+	token = strtok(0, "/");
+	if (token) {
+	  pushDir(dir);
+	}
+      } while (token);
+    } else {
+      char* buffer = malloc(strlen(dir)+2);
+      sprintf(buffer, "%s:", dir);
+      dir = buffer;
+    }
+  }
+
+  if (dir) {
+    squirt_backupDir(dir);
+  }
+
+  printf("\nbackup complete!\n");
 
   exit(EXIT_SUCCESS);
 
