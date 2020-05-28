@@ -104,6 +104,7 @@ getWindowSize(void)
 {
   initscr();
   int ydim;
+  (void)ydim;
   getmaxyx(stdscr, ydim, screenWidth);
   endwin();
 }

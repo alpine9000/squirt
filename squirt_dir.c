@@ -1,3 +1,4 @@
+#include <time.h>
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -48,8 +49,10 @@ fatalError(const char *format, ...)
 {
   va_list args;
   va_start(args, format);
+  fprintf(stderr, "%s: ", squirt_argv0);
   vfprintf(stderr, format, args);
   va_end(args);
+  fprintf(stderr, "\n");
   cleanupAndExit(EXIT_FAILURE);
 }
 
@@ -97,11 +100,15 @@ pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t si
 static void
 freeEntry(dir_entry_t* ptr)
 {
-  free((void*)ptr->name);
-  if (ptr->comment) {
-    free((void*)ptr->comment);
+  if (ptr) {
+    if (ptr->name) {
+      free((void*)ptr->name);
+    }
+    if (ptr->comment) {
+      free((void*)ptr->comment);
+    }
+    free(ptr);
   }
-  free(ptr);
 }
 
 static void
@@ -200,7 +207,7 @@ getDirEntry(dir_entry_list_t* entryList)
   uint32_t nameLength;
 
   if (!util_recvU32(socketFd, &nameLength)) {
-    fatalError("%s: failed to read name length\n", squirt_argv0);
+    fatalError("failed to read name length");
   }
 
   if (nameLength == 0) {
@@ -210,45 +217,45 @@ getDirEntry(dir_entry_list_t* entryList)
   char* buffer = util_recvLatin1AsUtf8(socketFd, nameLength);
 
   if (!buffer) {
-    fatalError("%s: failed to read name (%d bytes)\n", squirt_argv0, nameLength);
+    fatalError("failed to read name (%d bytes)", nameLength);
   }
 
   int32_t type;
   if (util_recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
-    fatalError("%s: failed to read type\n", squirt_argv0);
+    fatalError("failed to read type");
   }
   type = ntohl(type);
 
 
   uint32_t size;
   if (!util_recvU32(socketFd, &size)) {
-    fatalError("%s: failed to read file size\n", squirt_argv0);
+    fatalError("failed to read file size");
   }
 
   uint32_t prot;
   if (!util_recvU32(socketFd, &prot)) {
-    fatalError("%s: failed to read file prot\n", squirt_argv0);
+    fatalError("failed to read file prot");
   }
 
   uint32_t days;
   if (!util_recvU32(socketFd, &days)) {
-    fatalError("%s: failed to read file days\n", squirt_argv0);
+    fatalError("failed to read file days");
   }
 
 
   uint32_t mins;
   if (!util_recvU32(socketFd, &mins)) {
-    fatalError("%s: failed to read file mins\n", squirt_argv0);
+    fatalError("failed to read file mins");
   }
 
   uint32_t ticks;
   if (!util_recvU32(socketFd, &ticks)) {
-    fatalError("%s: failed to read file ticks\n", squirt_argv0);
+    fatalError("failed to read file ticks");
   }
 
   uint32_t commentLength;
   if (!util_recvU32(socketFd, &commentLength)) {
-    fatalError("%s: failed to read comment length\n", squirt_argv0);
+    fatalError("failed to read comment length");
   }
 
   char* comment;
@@ -272,23 +279,23 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
   setlocale(LC_NUMERIC, "");
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed\n");
+    fatalError("getSockAddr() failed");
   }
 
   if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed\n");
+    fatalError("socket() failed");
   }
 
   if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed\n");
+    fatalError("connect() failed");
   }
 
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed\n");
+    fatalError("send() commandCode failed");
   }
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
-    fatalError("%s send() command failed\n", squirt_argv0);
+    fatalError("send() command failed");
   }
 
   uint32_t more;
@@ -300,7 +307,7 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
   uint32_t error;
 
   if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-    fatalError("%s: failed to read remote status\n", squirt_argv0);
+    fatalError("failed to read remote status");
   }
 
   if (process) {
@@ -313,7 +320,7 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
   error = ntohl(error);
 
   if (ntohl(error) != 0) {
-    fatalError("%s: %s\n", squirt_argv0, util_getErrorString(error));
+    fatalError("%s", util_getErrorString(error));
   }
   cleanup();
 }
@@ -329,23 +336,23 @@ squirt_cd(const char* dir)
   uint8_t commandCode = SQUIRT_COMMAND_CD;
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed\n");
+    fatalError("getSockAddr() failed");
   }
 
   if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed\n");
+    fatalError("socket() failed");
   }
 
   if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed\n");
+    fatalError("connect() failed");
   }
 
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed\n");
+    fatalError("send() commandCode failed");
   }
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, dir)) {
-    fatalError("%s send() command failed\n", squirt_argv0);
+    fatalError("send() command failed");
   }
 
   uint8_t c;
@@ -356,20 +363,21 @@ squirt_cd(const char* dir)
       fprintf(stdout, "%c[", 27);
       fflush(stdout);
     } else {
-      write(1, &c, 1);
+      int ignore = write(1, &c, 1);
+      (void)ignore;
     }
   }
 
   uint32_t error;
 
   if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-    fatalError("failed to read remote status\n");
+    fatalError("failed to read remote status");
   }
 
   error = ntohl(error);
 
   if (ntohl(error) != 0) {
-    fatalError("%s: %s\n", squirt_argv0, util_getErrorString(error));
+    fatalError("%s", util_getErrorString(error));
   }
 
 }
@@ -391,14 +399,16 @@ safeName(const char* name)
 {
   char* safe = malloc(strlen(name)+1);
   char* dest = safe;
-  while (*name) {
-    if (*name != ':') {
-      *dest = *name;
-      dest++;
+  if (dest) {
+    while (*name) {
+      if (*name != ':') {
+	*dest = *name;
+	dest++;
+      }
+      name++;
     }
-    name++;
+    *dest = 0;
   }
-  *dest = 0;
 
   return safe;
 }
@@ -421,16 +431,19 @@ pushDir(const char* dir)
   squirt_cd(currentDir);
 
   char* safe = safeName(dir);
+  if (!safe) {
+    fatalError("failed to create safe name");
+  }
   int mkdirResult = mkdir(safe, 0777);
 
   if (mkdirResult != 0 && errno != EEXIST) {
-    fatalError("%s: failed to mkdir %s\n", squirt_argv0, safe);
+    fatalError("failed to mkdir %s", safe);
   }
 
   char* cwd = getcwd(0, 0);
 
   if (chdir(safe) == -1) {
-    fatalError("%s: unable to chdir to %s\n", squirt_argv0, safe);
+    fatalError("unable to chdir to %s", safe);
   }
 
   free(safe);
@@ -448,7 +461,9 @@ popDir(char* cwd)
     }
   }
 
-  chdir(cwd);
+  if (chdir(cwd)) {
+    fatalError("failed to cd to %s", cwd);
+  }
   free((void*)cwd);
 }
 
@@ -506,8 +521,11 @@ static int
 scanInt(FILE* fp)
 {
   int number = 0;
-  fscanf(fp, "%*[^:]:%d%*c", &number);
-  return number;
+  if (fscanf(fp, "%*[^:]:%d%*c", &number) == 1) {
+    return number;
+  } else {
+    return -1;
+  }
 }
 
 static char*
@@ -542,6 +560,9 @@ scanComment(FILE* fp)
 static int
 readExAllData(dir_entry_t* entry, const char* path)
 {
+  if (!entry) {
+    fatalError("readExAllData called with null entry");
+  }
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   mkdir(ident, 0777);
@@ -572,6 +593,7 @@ static int
 identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 {
   int identical =
+    one->name != NULL && two->name != NULL && 
     strcmp(one->name, two->name) == 0 &&
     ((one->comment == 0 && two->comment == 0)||
      (one->comment != 0 && two->comment != 0 && strcmp(one->comment, two->comment) == 0)) &&
@@ -613,17 +635,19 @@ backupList(dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      dir_entry_t *temp = malloc(sizeof(dir_entry_t));
-      struct stat st;
-      int skip = false;
-      if (stat(util_amigaBaseName(path), &st) == 0) {
-	if (st.st_size == entry->size) {
-	  skip = readExAllData(temp, path);
-	  if (skip) {
-	    skip = identicalExAllData(temp, entry);
-	    freeEntry(temp);
+      int skip = false;      
+      {
+	dir_entry_t *temp = malloc(sizeof(dir_entry_t));
+	struct stat st;
+	if (stat(util_amigaBaseName(path), &st) == 0) {
+	  if (st.st_size == entry->size) {
+	    skip = readExAllData(temp, path);
+	    if (skip) {
+	      skip = identicalExAllData(temp, entry);
+	    }
 	  }
 	}
+	freeEntry(temp);
       }
 
       if (skip) {
@@ -644,6 +668,7 @@ backupList(dir_entry_list_t* list)
     if (entry->type > 0) {
       const char* path = fullPath(entry->name);
       saveExAllData(entry, path);
+      free((void*)path);
       squirt_backupDir(entry->name);
     }
     entry = entry->next;
@@ -669,7 +694,7 @@ squirt_dir(int argc, char* argv[])
   squirt_argv0 = argv[0];
 
   if (argc != 3) {
-    fatalError("usage: %s hostname dir_name\n", squirt_argv0);
+    fatalError("usage: %s hostname dir_name", squirt_argv0);
   }
 
   hostname = argv[1];
@@ -687,11 +712,12 @@ squirt_backup(int argc, char* argv[])
   currentDir = 0;
 
   if (argc != 3) {
-    fatalError("usage: %s hostname dir_name\n", squirt_argv0);
+    fatalError("usage: %s hostname dir_name", squirt_argv0);
   }
 
   hostname = argv[1];
 
+  char* dirBuffer = 0;
   char* path = argv[2];
   char* token = strtok(path, ":");
   char* dir = 0;
@@ -699,10 +725,9 @@ squirt_backup(int argc, char* argv[])
     dir = token;
     token = strtok(0, "/");
     if (token) {
-      char* buffer = malloc(strlen(dir)+2);
-      sprintf(buffer, "%s:", dir);
-      pushDir(buffer);
-      free(buffer);
+      dirBuffer = malloc(strlen(dir)+2);
+      sprintf(dirBuffer, "%s:", dir);
+      pushDir(dirBuffer);
       do {
 	dir = token;
 	token = strtok(0, "/");
@@ -711,9 +736,9 @@ squirt_backup(int argc, char* argv[])
 	}
       } while (token);
     } else {
-      char* buffer = malloc(strlen(dir)+2);
-      sprintf(buffer, "%s:", dir);
-      dir = buffer;
+      dirBuffer = malloc(strlen(dir)+2);
+      sprintf(dirBuffer, "%s:", dir);
+      dir = dirBuffer;
     }
   }
 
@@ -721,6 +746,14 @@ squirt_backup(int argc, char* argv[])
     squirt_backupDir(dir);
   }
 
+  if (dirBuffer) {
+    free(dirBuffer);
+  }
+
+  if (currentDir) {
+    free(currentDir);
+  }
+  
   printf("\nbackup complete!\n");
 
   exit(EXIT_SUCCESS);

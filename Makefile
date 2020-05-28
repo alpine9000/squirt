@@ -1,8 +1,11 @@
 SQUIRTD_SRCS=squirtd.c squirtd_exec.c
 SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c util.c
 
-DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined
-CFLAGS=$(DEBUG_CFLAGS) -Os  -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
+CC=gcc 
+DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined #-fanalyzer
+WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors 
+LIBS=-lncurses -liconv
+CFLAGS=$(DEBUG_CFLAGS) -Os $(WARNINGS)
 VBCC_CFLAGS=-O1 -DAMIGA +aos68k -c99
 
 SQUIRTD_AMIGA_OBJS=$(addprefix build/obj/amiga/, $(SQUIRTD_SRCS:.c=.o))
@@ -10,20 +13,22 @@ SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
 CLIENT_APPS=build/squirt_exec build/squirt_suck build/squirt_dir build/squirt_backup build/squirt
-all: $(CLIENT_APPS) build/squirtd build/amiga/squirtd
+SERVER_APPS=build/squirtd build/amiga/squirtd
+
+all: $(CLIENT_APPS) $(SERVER_APPS)
 
 build/squirt: $(SQUIRT_OBJS)
-	gcc $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt -lncurses -liconv
+	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt $(LIBS)
 
 build/squirt_%: $(SQUIRT_OBJS)
-	gcc $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_$* -lncurses -liconv
+	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_$* $(LIBS)
 
 build/squirtd: $(SQUIRTD_OBJS)
-	gcc $(CFLAGS) $(SQUIRTD_OBJS) -o build/squirtd
+	$(CC) $(CFLAGS) $(SQUIRTD_OBJS) -o build/squirtd
 
 build/obj/%.o: %.c squirt.h common.h squirtd.h Makefile
 	@mkdir -p build/obj
-	gcc -c $(CFLAGS) $*.c -o build/obj/$*.o
+	$(CC) -c $(CFLAGS) $*.c -o build/obj/$*.o
 
 build/obj/amiga/%.o: %.c squirt.h common.h squirtd.h Makefile
 	@mkdir -p build/obj/amiga

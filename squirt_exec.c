@@ -19,10 +19,15 @@
 #include "common.h"
 
 static int socketFd = 0;
+static char* command = 0;
 
 static void
 cleanupAndExit(int errorCode)
 {
+  if (command) {
+    free(command);
+  }
+  
   if (socketFd) {
     close(socketFd);
     socketFd = 0;
@@ -53,7 +58,8 @@ squirt_cli(int argc, char* argv[])
 
   uint8_t commandCode;
   int commandLength = 0;
-  char* command = 0;
+  socketFd = 0;
+  command = 0;
 
   if (argc == 4 && strcmp("cd", argv[2]) == 0) {
     commandLength = strlen(argv[3]);
@@ -104,7 +110,8 @@ squirt_cli(int argc, char* argv[])
       fprintf(stdout, "%c[", 27);
       fflush(stdout);
     } else {
-      write(1, &c, 1);
+      int ignore = write(1, &c, 1);
+      (void)ignore;
     }
   }
 
