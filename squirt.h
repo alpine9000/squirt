@@ -16,7 +16,7 @@ util_getSockAddr(const char * host, int port, struct sockaddr_in * addr);
 const char*
 util_getErrorString(uint32_t error);
 
-int
+size_t
 util_recv(int socket, void *buffer, size_t length, int flags);
 
 int

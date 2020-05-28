@@ -62,6 +62,7 @@ typedef struct direntry {
   uint32_t days;
   uint32_t mins;
   uint32_t ticks;
+  const char* comment;
   struct direntry* next;
   int renderedSizeLength;
 } dir_entry_t;
@@ -72,7 +73,7 @@ typedef struct {
 } dir_entry_list_t;
 
 static void
-pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size, uint32_t prot, uint32_t days, uint32_t mins, uint32_t ticks)
+pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size, uint32_t prot, uint32_t days, uint32_t mins, uint32_t ticks, const char* comment)
 {
   dir_entry_t* entry = malloc(sizeof(dir_entry_t));
   if (list->tail == 0) {
@@ -82,7 +83,6 @@ pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t si
     list->tail = entry;
   }
 
-
   entry->next = 0;
   entry->name = name;
   entry->type = type;
@@ -91,6 +91,17 @@ pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t si
   entry->mins = mins;
   entry->ticks = ticks;
   entry->size = size;
+  entry->comment = comment;
+}
+
+static void
+freeEntry(dir_entry_t* ptr)
+{
+  free((void*)ptr->name);
+  if (ptr->comment) {
+    free((void*)ptr->comment);
+  }
+  free(ptr);
 }
 
 static void
@@ -101,8 +112,7 @@ freeEntryList(dir_entry_list_t* list)
   while (entry) {
     dir_entry_t* ptr = entry;
     entry = entry->next;
-    free((void*)ptr->name);
-    free(ptr);
+    freeEntry(ptr);
   }
 }
 
@@ -173,9 +183,13 @@ printEntryList(dir_entry_list_t* list)
       putchar(' ');
     }
 
-    if (printf("%'d %s %s%c\n", entry->size, formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
+    if (printf("%'d %s %s%c", entry->size, formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
       perror("printf");
     }
+    if (entry->comment) {
+      printf(" (%s)", entry->comment);
+    }
+    printf("\n");
     entry = entry->next;
   }
 }
@@ -232,7 +246,19 @@ getDirEntry(dir_entry_list_t* entryList)
     fatalError("%s: failed to read file ticks\n", squirt_argv0);
   }
 
-  pushDirEntry(entryList, buffer, type, size, prot, days, mins, ticks);
+  uint32_t commentLength;
+  if (!util_recvU32(socketFd, &commentLength)) {
+    fatalError("%s: failed to read comment length\n", squirt_argv0);
+  }
+
+  char* comment;
+  if (commentLength > 0) {
+    comment = util_recvLatin1AsUtf8(socketFd, commentLength);
+  } else {
+    comment = 0;
+  }
+
+  pushDirEntry(entryList, buffer, type, size, prot, days, mins, ticks, comment);
 
   return 1;
 }
@@ -430,13 +456,13 @@ popDir(char* cwd)
 static int
 saveExAllData(dir_entry_t* entry, const char* path)
 {
-  (void)entry;
   const char* baseName = util_amigaBaseName(path);
   const char* ident = ".__squirt/";
   mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
   sprintf(name, "%s%s", ident, baseName);
   FILE *fp = fopen(name, "w");
+
   if (!fp) {
     free(name);
     return 0;
@@ -449,11 +475,113 @@ saveExAllData(dir_entry_t* entry, const char* path)
   fprintf(fp, "days:%d\n", entry->days);
   fprintf(fp, "mins:%d\n", entry->mins);
   fprintf(fp, "ticks:%d\n", entry->ticks);
+  fprintf(fp, "comment:%s", entry->comment);
   fclose(fp);
 
   free(name);
   return 1;
 }
+
+
+static char*
+scanString(FILE* fp)
+{
+  char *buffer = NULL;
+  size_t linecap = 0;
+  getline(&buffer, &linecap, fp);
+  char* s = strstr(buffer, ":");
+  if (s) {
+    char* ptr = malloc(strlen(s)+1);
+    sscanf(s, ":%s", ptr);
+    free(buffer);
+    return ptr;
+  }
+
+  free(buffer);
+  return 0;
+}
+
+
+static int
+scanInt(FILE* fp)
+{
+  char *buffer = NULL;
+  size_t linecap = 0;
+  getline(&buffer, &linecap, fp);
+  char* s = strstr(buffer, ":");
+  if (s) {
+    int num;
+    sscanf(s, ":%d", &num);
+    free(buffer);
+    return num;
+  }
+
+  free(buffer);
+  return 0;
+}
+
+
+static int
+readExAllData(dir_entry_t* entry, const char* path)
+{
+  const char* baseName = util_amigaBaseName(path);
+  const char* ident = ".__squirt/";
+  mkdir(ident, 0777);
+  char* name = malloc(strlen(baseName)+1+strlen(ident));
+  sprintf(name, "%s%s", ident, baseName);
+  FILE *fp = fopen(name, "r+");
+  if (!fp) {
+    free(name);
+    return 0;
+  }
+  entry->name = scanString(fp);
+  entry->type = scanInt(fp);
+  entry->size = scanInt(fp);
+  entry->prot = scanInt(fp);
+  entry->days = scanInt(fp);
+  entry->mins = scanInt(fp);
+  entry->ticks = scanInt(fp);
+  char buffer[128] = {0};
+  char* ptr = buffer;
+
+  int len;
+  char c;
+  do {
+    len = fread(&c, 1, 1, fp);
+    ptr++;
+  } while (len > 0 && c != ':');
+
+  size_t i = 0;
+  do {
+    len = fread(&buffer[i], 1, 1, fp);
+    i++;
+  } while (len > 0 && i < sizeof(buffer));
+
+  entry->comment = malloc(strlen(buffer)+1);
+  strcpy((char*)entry->comment, buffer);
+  fclose(fp);
+  free(name);
+
+  return 1;
+}
+
+
+static int
+identicalExAllData(dir_entry_t* one, dir_entry_t* two)
+{
+  int identical =
+    strcmp(one->name, two->name) == 0 &&
+    strcmp(one->comment, two->comment) == 0 &&
+    one->type == two->type &&
+    one->size == two->size &&
+    one->prot == two->prot &&
+    one->days == two->days &&
+    one->mins == two->mins &&
+    one->ticks == two->ticks;
+
+  return identical;
+}
+
 
 void
 backupList(dir_entry_list_t* list)
@@ -463,14 +591,19 @@ backupList(dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      struct stat st;
-      int s = stat(entry->name, &st);
-      if (s != -1 && st.st_size == entry->size) {
+      dir_entry_t *temp = malloc(sizeof(dir_entry_t));
+      int skip =  readExAllData(temp, path);
+      if (skip) {
+	skip = identicalExAllData(temp, entry);
+	freeEntry(temp);
+      }
+      if (skip) {
 	printf("%s \xE2\x9C\x93\n", path);
       } else {
 	squirt_suckFile(hostname, path);
 	saveExAllData(entry, path);
 	printf("\n");
+	fflush(stdout);
       }
       free((void*)path);
     }

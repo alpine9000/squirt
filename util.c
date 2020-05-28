@@ -63,7 +63,7 @@ util_amigaBaseName(const char* filename)
   return filename;
 }
 
-int
+size_t
 util_recv(int socket, void *buffer, size_t length, int flags)
 {
   uint32_t total = 0;
@@ -112,7 +112,7 @@ util_recvLatin1AsUtf8(int socketFd, uint32_t length)
 {
   char* buffer = malloc(length+1);
 
-  if (recv(socketFd, buffer, length, 0) != length) {
+  if (util_recv(socketFd, buffer, length, 0) != length) {
     free(buffer);
     return 0;
   }
