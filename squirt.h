@@ -20,6 +20,12 @@ int
 util_recv(int socket, void *buffer, size_t length, int flags);
 
 int
+util_recvU32(int socketFd, uint32_t *data);
+
+const char*
+util_amigaBaseName(const char* filename);
+
+int
 squirt_cli(int argc, char* argv[]);
 
 int

@@ -52,6 +52,17 @@ util_latin1ToUtf8(const char* _buffer)
   return out;
 }
 
+const char*
+util_amigaBaseName(const char* filename)
+{
+  int i;
+  for (i = strlen(filename)-1; i > 0 && filename[i] != '/' && filename[i] != ':'; --i);
+  if (i > 0) {
+    filename = &filename[i+1];
+  }
+  return filename;
+}
+
 int
 util_recv(int socket, void *buffer, size_t length, int flags)
 {
@@ -68,6 +79,16 @@ util_recv(int socket, void *buffer, size_t length, int flags)
   } while (total < length);
 
   return total;
+}
+
+int
+util_recvU32(int socketFd, uint32_t *data)
+{
+  if (util_recv(socketFd, data, sizeof(uint32_t), 0) != sizeof(uint32_t)) {
+    return 0;
+  }
+  *data = ntohl(*data);
+  return 1;
 }
 
 int

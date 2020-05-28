@@ -58,6 +58,10 @@ typedef struct direntry {
   const char* name;
   int32_t type;
   uint32_t size;
+  uint32_t prot;
+  uint32_t days;
+  uint32_t mins;
+  uint32_t ticks;
   struct direntry* next;
   int renderedSizeLength;
 } dir_entry_t;
@@ -68,7 +72,7 @@ typedef struct {
 } dir_entry_list_t;
 
 static void
-pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size)
+pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size, uint32_t prot, uint32_t days, uint32_t mins, uint32_t ticks)
 {
   dir_entry_t* entry = malloc(sizeof(dir_entry_t));
   if (list->tail == 0) {
@@ -82,6 +86,10 @@ pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t si
   entry->next = 0;
   entry->name = name;
   entry->type = type;
+  entry->prot = prot;
+  entry->days = days;
+  entry->mins = mins;
+  entry->ticks = ticks;
   entry->size = size;
 }
 
@@ -111,6 +119,37 @@ ctow(const char *buf) {
 }
 
 static void
+printProtectFlags(dir_entry_t* entry)
+{
+  char bits[] = {'d', 'e', 'w', 'r', 'a', 'p', 's', 'h'};
+  uint32_t prot = (entry->prot ^ 0xF) & 0xFF;
+  for (int i = 7; i >= 0; i--) {
+    if (prot & (1<<i)) {
+      printf("%c", bits[i]);
+    } else {
+      printf("-");
+    }
+  }
+}
+
+static char*
+formatDateTime(dir_entry_t* entry)
+{
+  struct timeval tv;
+  time_t nowtime;
+  struct tm *nowtm;
+  static char tmbuf[64];
+
+  int sec = entry->ticks / 50;
+  tv.tv_sec = (8*365*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
+  tv.tv_usec = (entry->ticks - (sec * 50)) * 200;
+  nowtime = tv.tv_sec;
+  nowtm = gmtime(&nowtime);
+  strftime(tmbuf, sizeof tmbuf, "%m-%d-%y %H:%M:%S", nowtm);
+  return tmbuf;
+}
+
+static void
 printEntryList(dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
@@ -128,17 +167,15 @@ printEntryList(dir_entry_list_t* list)
 
   entry = list->head;
   while (entry) {
+    printProtectFlags(entry);
+
     for (int i = 0; i < maxSizeLength-entry->renderedSizeLength + 3; i++) {
       putchar(' ');
     }
 
-    if (printf("%'d %s%c\n", entry->size,  entry->name, entry->type > 0 ? '/' : ' ') < 0) {
+    if (printf("%'d %s %s%c\n", entry->size, formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
       perror("printf");
     }
-    //    for (unsigned int i = 0; i < strlen(entry->name); i++) {
-    //      printf("%03d ", (unsigned char)entry->name[i]);
-    //    }
-    //printf("\n");
     entry = entry->next;
   }
 }
@@ -148,22 +185,13 @@ getDirEntry(dir_entry_list_t* entryList)
 {
   uint32_t nameLength;
 
-  if (util_recv(socketFd, &nameLength, sizeof(nameLength), 0) != sizeof(nameLength)) {
+  if (!util_recvU32(socketFd, &nameLength)) {
     fatalError("%s: failed to read name length\n", squirt_argv0);
   }
-
-  nameLength = ntohl(nameLength);
 
   if (nameLength == 0) {
     return 0;
   }
-
-  int32_t type;
-  if (util_recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
-    fatalError("%s: failed to read type\n", squirt_argv0);
-  }
-
-  type = ntohl(type);
 
   char* buffer = util_recvLatin1AsUtf8(socketFd, nameLength);
 
@@ -171,15 +199,40 @@ getDirEntry(dir_entry_list_t* entryList)
     fatalError("%s: failed to read name (%d bytes)\n", squirt_argv0, nameLength);
   }
 
-  uint32_t fileSize;
+  int32_t type;
+  if (util_recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
+    fatalError("%s: failed to read type\n", squirt_argv0);
+  }
+  type = ntohl(type);
 
-  if (util_recv(socketFd, &fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
+
+  uint32_t size;
+  if (!util_recvU32(socketFd, &size)) {
     fatalError("%s: failed to read file size\n", squirt_argv0);
   }
 
-  fileSize = ntohl(fileSize);
+  uint32_t prot;
+  if (!util_recvU32(socketFd, &prot)) {
+    fatalError("%s: failed to read file prot\n", squirt_argv0);
+  }
 
-  pushDirEntry(entryList, buffer, type, fileSize);
+  uint32_t days;
+  if (!util_recvU32(socketFd, &days)) {
+    fatalError("%s: failed to read file days\n", squirt_argv0);
+  }
+
+
+  uint32_t mins;
+  if (!util_recvU32(socketFd, &mins)) {
+    fatalError("%s: failed to read file mins\n", squirt_argv0);
+  }
+
+  uint32_t ticks;
+  if (!util_recvU32(socketFd, &ticks)) {
+    fatalError("%s: failed to read file ticks\n", squirt_argv0);
+  }
+
+  pushDirEntry(entryList, buffer, type, size, prot, days, mins, ticks);
 
   return 1;
 }
@@ -191,8 +244,6 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
   uint8_t commandCode = SQUIRT_COMMAND_DIR;
 
   setlocale(LC_NUMERIC, "");
-  setlocale(LC_ALL, "");
-
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed\n");
@@ -376,6 +427,34 @@ popDir(char* cwd)
 }
 
 
+static int
+saveExAllData(dir_entry_t* entry, const char* path)
+{
+  (void)entry;
+  const char* baseName = util_amigaBaseName(path);
+  const char* ident = ".__squirt/";
+  mkdir(ident, 0777);
+  char* name = malloc(strlen(baseName)+1+strlen(ident));
+  sprintf(name, "%s%s", ident, baseName);
+  FILE *fp = fopen(name, "w");
+  if (!fp) {
+    free(name);
+    return 0;
+  }
+
+  fprintf(fp, "name:%s\n", entry->name);
+  fprintf(fp, "type:%d\n", entry->type);
+  fprintf(fp, "size:%d\n", entry->size);
+  fprintf(fp, "prot:%d\n", entry->prot);
+  fprintf(fp, "days:%d\n", entry->days);
+  fprintf(fp, "mins:%d\n", entry->mins);
+  fprintf(fp, "ticks:%d\n", entry->ticks);
+  fclose(fp);
+
+  free(name);
+  return 1;
+}
+
 void
 backupList(dir_entry_list_t* list)
 {
@@ -390,6 +469,7 @@ backupList(dir_entry_list_t* list)
 	printf("%s \xE2\x9C\x93\n", path);
       } else {
 	squirt_suckFile(hostname, path);
+	saveExAllData(entry, path);
 	printf("\n");
       }
       free((void*)path);
@@ -400,6 +480,8 @@ backupList(dir_entry_list_t* list)
   entry = list->head;
   while (entry) {
     if (entry->type > 0) {
+      const char* path = fullPath(entry->name);
+      saveExAllData(entry, path);
       squirt_backupDir(entry->name);
     }
     entry = entry->next;

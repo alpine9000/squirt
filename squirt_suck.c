@@ -122,16 +122,6 @@ getWindowSize(void)
 }
 
 
-static const char*
-amigaBaseName(const char* filename)
-{
-  int i;
-  for (i = strlen(filename)-1; i > 0 && filename[i] != '/' && filename[i] != ':'; --i);
-  if (i > 0) {
-    filename = &filename[i+1];
-  }
-  return filename;
-}
 
 uint32_t
 squirt_suckFile(const char* hostname, const char* filename)
@@ -174,7 +164,7 @@ squirt_suckFile(const char* hostname, const char* filename)
   }
 
   uint32_t fileLength = ntohl(networkFileLength);
-  const char* baseName = amigaBaseName(filename);
+  const char* baseName = util_amigaBaseName(filename);
 
   if (fileLength == 0) {
     //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
@@ -241,7 +231,7 @@ squirt_suck(int argc, char* argv[])
   long seconds = end.tv_sec - squirt_suckStart.tv_sec;
   long micros = ((seconds * 1000000) + end.tv_usec) - squirt_suckStart.tv_usec;
 
-  const char* baseName = amigaBaseName(argv[2]);
+  const char* baseName = util_amigaBaseName(argv[2]);
 
   fflush(stdout);
 

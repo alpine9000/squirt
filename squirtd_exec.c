@@ -83,7 +83,7 @@ exec_dir(const char* dir, int socketFd)
   eac->eac_LastKey = 0;
   int more;
   do {
-    more = ExAll(lock, data, BLOCK_SIZE, ED_SIZE, eac);
+    more = ExAll(lock, data, BLOCK_SIZE, ED_DATE, eac);
     if ((!more) && (IoErr() != ERROR_NO_MORE_ENTRIES)) {
       goto cleanup;
       break;
@@ -94,11 +94,16 @@ exec_dir(const char* dir, int socketFd)
     }
     struct ExAllData *ead = (struct ExAllData *) data;
     do {
+      printf("%s: ead->ed_Prot = %x\n", ead->ed_Name, ead->ed_Prot);
       uint32_t nameLength = strlen(ead->ed_Name);
       if (send(socketFd, (void*)&nameLength, sizeof(nameLength), 0) != sizeof(nameLength) ||
-	  send(socketFd, (void*)&ead->ed_Type, sizeof(ead->ed_Type), 0) != sizeof(ead->ed_Type) ||
 	  send(socketFd, ead->ed_Name, nameLength, 0) != nameLength ||
-	  send(socketFd, (void*)&ead->ed_Size, sizeof(ead->ed_Size), 0) != sizeof(ead->ed_Size)) {
+	  send(socketFd, (void*)&ead->ed_Type, sizeof(ead->ed_Type), 0) != sizeof(ead->ed_Type) ||
+	  send(socketFd, (void*)&ead->ed_Size, sizeof(ead->ed_Size), 0) != sizeof(ead->ed_Size) ||
+	  send(socketFd, (void*)&ead->ed_Prot, sizeof(ead->ed_Prot), 0) != sizeof(ead->ed_Prot) ||
+	  send(socketFd, (void*)&ead->ed_Days, sizeof(ead->ed_Days), 0) != sizeof(ead->ed_Days) ||
+	  send(socketFd, (void*)&ead->ed_Mins, sizeof(ead->ed_Mins), 0) != sizeof(ead->ed_Mins) ||
+	  send(socketFd, (void*)&ead->ed_Ticks, sizeof(ead->ed_Ticks), 0) != sizeof(ead->ed_Ticks)) {
 	squirtd_error = ERROR_SEND_FAILED;
 	goto cleanup;
       }
