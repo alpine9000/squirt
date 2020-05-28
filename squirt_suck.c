@@ -171,7 +171,7 @@ squirt_suckFile(const char* hostname, const char* filename)
     //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
   }
 
-  fileFd = open(baseName, O_WRONLY|O_CREAT, 0777);
+  fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC, 0777);
 
   if (!fileFd) {
     fatalError("%s: failed to open %s\n", squirt_argv0, baseName);

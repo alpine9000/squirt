@@ -75,10 +75,17 @@ typedef struct {
   dir_entry_t* tail;
 } dir_entry_list_t;
 
+static dir_entry_t*
+newDirEntry(void)
+{
+  return calloc(1, sizeof(dir_entry_t));
+}
+
 static void
 pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size, uint32_t prot, uint32_t days, uint32_t mins, uint32_t ticks, const char* comment)
 {
-  dir_entry_t* entry = malloc(sizeof(dir_entry_t));
+  dir_entry_t* entry = newDirEntry();
+
   if (list->tail == 0) {
     list->head = list->tail = entry;
   } else {
@@ -593,7 +600,7 @@ static int
 identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 {
   int identical =
-    one->name != NULL && two->name != NULL && 
+    one->name != NULL && two->name != NULL &&
     strcmp(one->name, two->name) == 0 &&
     ((one->comment == 0 && two->comment == 0)||
      (one->comment != 0 && two->comment != 0 && strcmp(one->comment, two->comment) == 0)) &&
@@ -635,9 +642,9 @@ backupList(dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      int skip = false;      
+      int skip = false;
       {
-	dir_entry_t *temp = malloc(sizeof(dir_entry_t));
+	dir_entry_t *temp = newDirEntry();
 	struct stat st;
 	if (stat(util_amigaBaseName(path), &st) == 0) {
 	  if (st.st_size == entry->size) {
@@ -753,7 +760,7 @@ squirt_backup(int argc, char* argv[])
   if (currentDir) {
     free(currentDir);
   }
-  
+
   printf("\nbackup complete!\n");
 
   exit(EXIT_SUCCESS);
