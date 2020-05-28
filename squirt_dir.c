@@ -148,7 +148,7 @@ getDirEntry(dir_entry_list_t* entryList)
 {
   uint32_t nameLength;
 
-  if (recv(socketFd, &nameLength, sizeof(nameLength), 0) != sizeof(nameLength)) {
+  if (util_recv(socketFd, &nameLength, sizeof(nameLength), 0) != sizeof(nameLength)) {
     fatalError("%s: failed to read name length\n", squirt_argv0);
   }
 
@@ -159,8 +159,7 @@ getDirEntry(dir_entry_list_t* entryList)
   }
 
   int32_t type;
-
-  if (recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
+  if (util_recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
     fatalError("%s: failed to read type\n", squirt_argv0);
   }
 
@@ -174,13 +173,11 @@ getDirEntry(dir_entry_list_t* entryList)
 
   uint32_t fileSize;
 
-  if (recv(socketFd, &fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
+  if (util_recv(socketFd, &fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
     fatalError("%s: failed to read file size\n", squirt_argv0);
   }
 
   fileSize = ntohl(fileSize);
-
-  //  printf("%s%c\t\t%d\n", buffer, type > 0 ? '/' : ' ', fileSize);
 
   pushDirEntry(entryList, buffer, type, fileSize);
 
@@ -275,7 +272,7 @@ squirt_cd(const char* dir)
   }
 
   uint8_t c;
-  while (recv(socketFd, &c, 1, 0)) {
+  while (util_recv(socketFd, &c, 1, 0)) {
     if (c == 0) {
       break;
     } else if (c == 0x9B) {
@@ -390,13 +387,10 @@ backupList(dir_entry_list_t* list)
       struct stat st;
       int s = stat(entry->name, &st);
       if (s != -1 && st.st_size == entry->size) {
-	fflush(stdout);
-	//printf("skipping file %s (local copy exists)\n", path);
-	printf(".");
-	fflush(stdout);
+	printf("%s \xE2\x9C\x93\n", path);
       } else {
 	squirt_suckFile(hostname, path);
-	fflush(stdout);
+	printf("\n");
       }
       free((void*)path);
     }
@@ -416,9 +410,8 @@ backupList(dir_entry_list_t* list)
 static void
 squirt_backupDir(const char* dir)
 {
-  printf("\nbacking up dir %s", dir);
-
   char* cwd = pushDir(dir);
+  printf("%s/ \xE2\x9C\x93\n", currentDir);
 
   squirt_processDir(currentDir, backupList);
 

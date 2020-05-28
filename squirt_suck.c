@@ -21,6 +21,8 @@ static int socketFd = 0;
 static int fileFd = 0;
 static char* readBuffer = 0;
 static int screenWidth;
+static struct timeval squirt_suckStart;
+
 
 static void
 cleanup(void)
@@ -65,7 +67,7 @@ printFormatSpeed(int32_t size, double elapsed)
 {
   double speed = (double)size/elapsed;
   if (speed < 1000) {
-    printf("%0.2f bytes/s", speed);
+    printf("%0.2f b/s", speed);
   } else if (speed < 1000000) {
     printf("%0.2f kB/s", speed/1000.0f);
   } else {
@@ -89,7 +91,7 @@ printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
   struct timeval current;
 
   printf("\r%c[K", 27);
-  printf("%02d%% [", percentage);
+  printf("%3d%% [", percentage);
 
   for (int i = 0; i < barWidth; i++) {
     if (screenPercentage > i) {
@@ -131,12 +133,13 @@ amigaBaseName(const char* filename)
   return filename;
 }
 
-void
+uint32_t
 squirt_suckFile(const char* hostname, const char* filename)
 {
   uint32_t total = 0;
   struct sockaddr_in sockAddr;
-  struct timeval start, end;
+
+  fflush(stdout);
 
   setlocale(LC_NUMERIC, "");
   getWindowSize();
@@ -159,14 +162,6 @@ squirt_suckFile(const char* hostname, const char* filename)
     fatalError("send() commandCode failed\n");
   }
 
-#if 0
-  uint32_t nameLength = strlen(filename);
-  uint32_t networkNameLength = htonl(nameLength);
-
-  if (send(socketFd, &networkNameLength, sizeof(networkNameLength), 0) != sizeof(networkNameLength)) {
-    fatalError("send() nameLength failed\n");
-  }
-#endif
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
     fatalError("%s: send() filename failed\n", squirt_argv0);
@@ -174,8 +169,8 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   uint32_t networkFileLength;
 
-  if (recv(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(networkFileLength)) {
-    fatalError("recv() fileLength failed\n");
+  if (util_recv(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(networkFileLength)) {
+    fatalError("util_recv() Filelength failed\n");
   }
 
   uint32_t fileLength = ntohl(networkFileLength);
@@ -185,7 +180,6 @@ squirt_suckFile(const char* hostname, const char* filename)
     //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
   }
 
-  printf("opening %s %s\n", baseName, filename);
   fileFd = open(baseName, O_WRONLY|O_CREAT, 0777);
 
   if (!fileFd) {
@@ -198,7 +192,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   fflush(stdout);
 
-  gettimeofday(&start, NULL);
+  gettimeofday(&squirt_suckStart, NULL);
 
   if (fileLength) {
     do {
@@ -212,7 +206,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 	fflush(stdout);
 	fatalError("\n%s failed to read\n", squirt_argv0);
       } else {
-	printProgress(&start, total, fileLength);
+	printProgress(&squirt_suckStart, total, fileLength);
 	int readLen;
 	if ((readLen = write(fileFd, readBuffer, len)) != len) {
 	  fflush(stdout);
@@ -223,17 +217,13 @@ squirt_suckFile(const char* hostname, const char* filename)
     } while (total < fileLength);
   }
 
-  printProgress(&start, total, fileLength);
+  printProgress(&squirt_suckStart, total, fileLength);
 
-
-  gettimeofday(&end, NULL);
-  long seconds = end.tv_sec - start.tv_sec;
-  long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", filename, baseName, fileLength, ((double)micros)/1000000.0f);
-  printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
-  printf("\n");
+  fflush(stdout);
 
   cleanup();
+
+  return total;
 }
 
 int
@@ -243,7 +233,21 @@ squirt_suck(int argc, char* argv[])
     fatalError("usage: %s hostname filename\n", squirt_argv0);
   }
 
-  squirt_suckFile(argv[1], argv[2]);
+  uint32_t length = squirt_suckFile(argv[1], argv[2]);
+
+  struct timeval end;
+
+  gettimeofday(&end, NULL);
+  long seconds = end.tv_sec - squirt_suckStart.tv_sec;
+  long micros = ((seconds * 1000000) + end.tv_usec) - squirt_suckStart.tv_usec;
+
+  const char* baseName = amigaBaseName(argv[2]);
+
+  fflush(stdout);
+
+  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", argv[2], baseName, length, ((double)micros)/1000000.0f);
+  printFormatSpeed(length, ((double)micros)/1000000.0f);
+  printf("\n");
 
   cleanupAndExit();
 

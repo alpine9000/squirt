@@ -17,6 +17,9 @@ const char*
 util_getErrorString(uint32_t error);
 
 int
+util_recv(int socket, void *buffer, size_t length, int flags);
+
+int
 squirt_cli(int argc, char* argv[]);
 
 int
@@ -31,5 +34,5 @@ squirt_suck(int argc, char* argv[]);
 int
 squirt(int argc, char* argv[]);
 
-void
+uint32_t
 squirt_suckFile(const char* hostname, const char* filename);

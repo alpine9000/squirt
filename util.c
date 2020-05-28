@@ -52,6 +52,23 @@ util_latin1ToUtf8(const char* _buffer)
   return out;
 }
 
+int
+util_recv(int socket, void *buffer, size_t length, int flags)
+{
+  uint32_t total = 0;
+  char* ptr = buffer;
+  do {
+    int got = recv(socket, ptr, length-total, flags);
+    if (got > 0) {
+      total += got;
+      ptr += got;
+    } else {
+      return got;
+    }
+  } while (total < length);
+
+  return total;
+}
 
 int
 util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str)

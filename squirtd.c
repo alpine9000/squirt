@@ -135,8 +135,6 @@ int16_t
 file_send(void)
 {
 #ifdef AMIGA
-  printf("sending %s\n", filename);
-
   BPTR lock = Lock(filename, ACCESS_READ);
   if (!lock) {
     return ERROR_FILE_READ_FAILED;
