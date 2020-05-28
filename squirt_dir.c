@@ -21,7 +21,7 @@
 #include "squirt.h"
 #include "common.h"
 
-
+static const char* SQUIRT_EXALL_INFO_DIR_NAME = ".__squirt/";
 static char* hostname;
 static char* currentDir;
 static int socketFd = 0;
@@ -457,7 +457,7 @@ static int
 saveExAllData(dir_entry_t* entry, const char* path)
 {
   const char* baseName = util_amigaBaseName(path);
-  const char* ident = ".__squirt/";
+  const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
   sprintf(name, "%s%s", ident, baseName);
@@ -490,38 +490,52 @@ saveExAllData(dir_entry_t* entry, const char* path)
 static char*
 scanString(FILE* fp)
 {
-  char *buffer = NULL;
-  size_t linecap = 0;
-  getline(&buffer, &linecap, fp);
-  char* s = strstr(buffer, ":");
-  if (s) {
-    char* ptr = malloc(strlen(s)+1);
-    sscanf(s, ":%[^\n]", ptr);
-    free(buffer);
-    return ptr;
+  char buffer[108] = {0};
+  int c = fscanf(fp, "%*[^:]:%107[^\n]%*c", buffer);
+  if (c == 1) {
+    char* str = malloc(strlen(buffer)+1);
+    strcpy(str, buffer);
+    return str;
+  } else {
+    return 0;
   }
-
-  free(buffer);
-  return 0;
 }
 
 
 static int
 scanInt(FILE* fp)
 {
-  char *buffer = NULL;
-  size_t linecap = 0;
-  getline(&buffer, &linecap, fp);
-  char* s = strstr(buffer, ":");
-  if (s) {
-    int num;
-    sscanf(s, ":%d", &num);
-    free(buffer);
-    return num;
+  int number = 0;
+  fscanf(fp, "%*[^:]:%d%*c", &number);
+  return number;
+}
+
+static char*
+scanComment(FILE* fp)
+{
+  char buffer[128] = {0};
+  char* ptr = buffer;
+  int len;
+  char c;
+
+  do {
+    len = fread(&c, 1, 1, fp);
+    ptr++;
+  } while (len > 0 && c != ':');
+
+  size_t i = 0;
+  do {
+    len = fread(&buffer[i], 1, 1, fp);
+    i++;
+  } while (len > 0 && i < sizeof(buffer));
+
+  char* comment = 0;
+  if (strlen(buffer) > 0) {
+    comment = malloc(strlen(buffer)+1);
+    strcpy((char*)comment, buffer);
   }
 
-  free(buffer);
-  return 0;
+  return comment;
 }
 
 
@@ -529,7 +543,7 @@ static int
 readExAllData(dir_entry_t* entry, const char* path)
 {
   const char* baseName = util_amigaBaseName(path);
-  const char* ident = ".__squirt/";
+  const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
   sprintf(name, "%s%s", ident, baseName);
@@ -545,28 +559,8 @@ readExAllData(dir_entry_t* entry, const char* path)
   entry->days = scanInt(fp);
   entry->mins = scanInt(fp);
   entry->ticks = scanInt(fp);
-  char buffer[128] = {0};
-  char* ptr = buffer;
+  entry->comment = scanComment(fp);
 
-  int len;
-  char c;
-  do {
-    len = fread(&c, 1, 1, fp);
-    ptr++;
-  } while (len > 0 && c != ':');
-
-  size_t i = 0;
-  do {
-    len = fread(&buffer[i], 1, 1, fp);
-    i++;
-  } while (len > 0 && i < sizeof(buffer));
-
-  if (strlen(buffer) > 0) {
-    entry->comment = malloc(strlen(buffer)+1);
-    strcpy((char*)entry->comment, buffer);
-  } else {
-    entry->comment = 0;
-  }
   fclose(fp);
   free(name);
 
