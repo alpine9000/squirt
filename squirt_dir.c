@@ -496,7 +496,7 @@ scanString(FILE* fp)
   char* s = strstr(buffer, ":");
   if (s) {
     char* ptr = malloc(strlen(s)+1);
-    sscanf(s, ":%s", ptr);
+    sscanf(s, ":%[^\n]", ptr);
     free(buffer);
     return ptr;
   }
@@ -620,11 +620,18 @@ backupList(dir_entry_list_t* list)
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
       dir_entry_t *temp = malloc(sizeof(dir_entry_t));
-      int skip =  readExAllData(temp, path);
-      if (skip) {
-	skip = identicalExAllData(temp, entry);
-	freeEntry(temp);
+      struct stat st;
+      int skip = false;
+      if (stat(util_amigaBaseName(path), &st) == 0) {
+	if (st.st_size == entry->size) {
+	  skip = readExAllData(temp, path);
+	  if (skip) {
+	    skip = identicalExAllData(temp, entry);
+	    freeEntry(temp);
+	  }
+	}
       }
+
       if (skip) {
 	printf("%s \xE2\x9C\x93\n", path);
       } else {
