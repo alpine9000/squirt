@@ -475,7 +475,11 @@ saveExAllData(dir_entry_t* entry, const char* path)
   fprintf(fp, "days:%d\n", entry->days);
   fprintf(fp, "mins:%d\n", entry->mins);
   fprintf(fp, "ticks:%d\n", entry->ticks);
-  fprintf(fp, "comment:%s", entry->comment);
+  if (entry->comment) {
+    fprintf(fp, "comment:%s", entry->comment);
+  } else {
+    fprintf(fp, "comment:");
+  }
   fclose(fp);
 
   free(name);
@@ -557,8 +561,12 @@ readExAllData(dir_entry_t* entry, const char* path)
     i++;
   } while (len > 0 && i < sizeof(buffer));
 
-  entry->comment = malloc(strlen(buffer)+1);
-  strcpy((char*)entry->comment, buffer);
+  if (strlen(buffer) > 0) {
+    entry->comment = malloc(strlen(buffer)+1);
+    strcpy((char*)entry->comment, buffer);
+  } else {
+    entry->comment = 0;
+  }
   fclose(fp);
   free(name);
 
@@ -571,13 +579,33 @@ identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 {
   int identical =
     strcmp(one->name, two->name) == 0 &&
-    strcmp(one->comment, two->comment) == 0 &&
+    ((one->comment == 0 && two->comment == 0)||
+     (one->comment != 0 && two->comment != 0 && strcmp(one->comment, two->comment) == 0)) &&
     one->type == two->type &&
     one->size == two->size &&
     one->prot == two->prot &&
     one->days == two->days &&
     one->mins == two->mins &&
     one->ticks == two->ticks;
+
+#if 0
+  if (!identical) {
+    printf(">%s<>%s< %d\n", one->name, two->name, strcmp(one->name, two->name) );
+    printf("%d %d\n", one->comment == 0, two->comment == 0);
+    if (one->comment != 0) {
+      printf("1:>%s<\n", one->comment);
+    }
+    if (two->comment != 0) {
+      printf("2:>%s<\n", two->comment);
+    }
+    printf("%d %d %d\n", one->type, two->type, one->type == two->type);
+    printf("%d %d %d\n", one->size, two->size, one->size == two->size);
+    printf("%d %d %d\n", one->prot, two->prot, one->prot == two->prot);
+    printf("%d %d %d\n", one->days, two->days, one->days == two->days);
+    printf("%d %d %d\n", one->mins, two->mins, one->mins == two->mins);
+    printf("%d %d %d\n", one->ticks, two->ticks, one->ticks == two->ticks);
+  }
+#endif
 
   return identical;
 }
