@@ -1,31 +1,40 @@
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
-#include <ncurses.h>
-#include <fcntl.h>
-#include <netdb.h>
 #include <unistd.h>
-#include <locale.h>
-#include <libgen.h>
-#include <unistd.h>
-#include <iconv.h>
 #include <errno.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <sys/time.h>
 #include <sys/stat.h>
 
 #include "squirt.h"
 #include "common.h"
 
+typedef struct direntry {
+  const char* name;
+  int32_t type;
+  uint32_t size;
+  uint32_t prot;
+  uint32_t days;
+  uint32_t mins;
+  uint32_t ticks;
+  const char* comment;
+  struct direntry* next;
+  int renderedSizeLength;
+} dir_entry_t;
+
+typedef struct {
+  dir_entry_t* head;
+  dir_entry_t* tail;
+} dir_entry_list_t;
+
 static const char* SQUIRT_EXALL_INFO_DIR_NAME = ".__squirt/";
 static char* hostname;
 static char* currentDir;
 static int socketFd = 0;
+
+static void
+squirt_backupDir(const char* dir);
 
 static void
 cleanup(void)
@@ -35,6 +44,7 @@ cleanup(void)
     socketFd = 0;
   }
 }
+
 
 static void
 cleanupAndExit(int errorCode)
@@ -57,29 +67,12 @@ fatalError(const char *format, ...)
 }
 
 
-typedef struct direntry {
-  const char* name;
-  int32_t type;
-  uint32_t size;
-  uint32_t prot;
-  uint32_t days;
-  uint32_t mins;
-  uint32_t ticks;
-  const char* comment;
-  struct direntry* next;
-  int renderedSizeLength;
-} dir_entry_t;
-
-typedef struct {
-  dir_entry_t* head;
-  dir_entry_t* tail;
-} dir_entry_list_t;
-
 static dir_entry_t*
 newDirEntry(void)
 {
   return calloc(1, sizeof(dir_entry_t));
 }
+
 
 static void
 pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t size, uint32_t prot, uint32_t days, uint32_t mins, uint32_t ticks, const char* comment)
@@ -104,6 +97,7 @@ pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_t si
   entry->comment = comment;
 }
 
+
 static void
 freeEntry(dir_entry_t* ptr)
 {
@@ -118,6 +112,7 @@ freeEntry(dir_entry_t* ptr)
   }
 }
 
+
 static void
 freeEntryList(dir_entry_list_t* list)
 {
@@ -130,17 +125,6 @@ freeEntryList(dir_entry_list_t* list)
   }
 }
 
-
-wchar_t *
-ctow(const char *buf) {
-  wchar_t *cr, *output;
-  cr = output = malloc((strlen(buf)+1)*sizeof(wchar_t));
-  while (*buf) {
-    *output++ = *buf++;
-  }
-  *output = 0;
-  return cr;
-}
 
 static void
 printProtectFlags(dir_entry_t* entry)
@@ -155,6 +139,7 @@ printProtectFlags(dir_entry_t* entry)
     }
   }
 }
+
 
 static char*
 formatDateTime(dir_entry_t* entry)
@@ -172,6 +157,7 @@ formatDateTime(dir_entry_t* entry)
   strftime(tmbuf, sizeof tmbuf, "%m-%d-%y %H:%M:%S", nowtm);
   return tmbuf;
 }
+
 
 static void
 printEntryList(dir_entry_list_t* list)
@@ -208,6 +194,7 @@ printEntryList(dir_entry_list_t* list)
   }
 }
 
+
 static uint32_t
 getDirEntry(dir_entry_list_t* entryList)
 {
@@ -232,7 +219,6 @@ getDirEntry(dir_entry_list_t* entryList)
     fatalError("failed to read type");
   }
   type = ntohl(type);
-
 
   uint32_t size;
   if (!util_recvU32(socketFd, &size)) {
@@ -277,13 +263,12 @@ getDirEntry(dir_entry_list_t* entryList)
   return 1;
 }
 
+
 static void
 squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
 {
   struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_DIR;
-
-  setlocale(LC_NUMERIC, "");
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed");
@@ -332,9 +317,6 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
   cleanup();
 }
 
-
-static void
-squirt_backupDir(const char* dir);
 
 static void
 squirt_cd(const char* dir)
@@ -535,6 +517,7 @@ scanInt(FILE* fp)
   }
 }
 
+
 static char*
 scanComment(FILE* fp)
 {
@@ -634,7 +617,7 @@ identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 }
 
 
-void
+static void
 backupList(dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
@@ -642,7 +625,7 @@ backupList(dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      int skip = false;
+      int skip = 0;
       {
 	dir_entry_t *temp = newDirEntry();
 	struct stat st;
@@ -712,6 +695,7 @@ squirt_dir(int argc, char* argv[])
 
   return 0;
 }
+
 
 int
 squirt_backup(int argc, char* argv[])

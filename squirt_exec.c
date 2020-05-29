@@ -1,25 +1,15 @@
-#include <ncurses.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <fcntl.h>
-#include <netdb.h>
 #include <unistd.h>
-#include <locale.h>
-#include <libgen.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <sys/time.h>
-#include <sys/stat.h>
 
 #include "squirt.h"
 #include "common.h"
 
 static int socketFd = 0;
 static char* command = 0;
+
 
 static void
 cleanupAndExit(int errorCode)
@@ -48,6 +38,7 @@ fatalError(const char *format, ...)
   fprintf(stderr, "\n");
   cleanupAndExit(EXIT_FAILURE);
 }
+
 
 int
 squirt_cli(int argc, char* argv[])

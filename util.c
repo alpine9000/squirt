@@ -1,9 +1,9 @@
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h>
 #include <iconv.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 
 #include "squirt.h"
@@ -35,6 +35,7 @@ util_utf8ToLatin1(const char* buffer)
   return out;
 }
 
+
 static char*
 util_latin1ToUtf8(const char* _buffer)
 {
@@ -51,6 +52,57 @@ util_latin1ToUtf8(const char* _buffer)
   free(buffer);
   return out;
 }
+
+
+void
+util_printFormatSpeed(int32_t size, double elapsed)
+{
+  double speed = (double)size/elapsed;
+  if (speed < 1000) {
+    printf("%0.2f b/s", speed);
+  } else if (speed < 1000000) {
+    printf("%0.2f kB/s", speed/1000.0f);
+  } else {
+    printf("%0.2f MB/s", speed/1000000.0f);
+  }
+}
+
+void
+util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
+{
+  int percentage;
+
+  if (fileLength) {
+    percentage = (total*100)/fileLength;
+  } else {
+    percentage = 100;
+  }
+  int barWidth = squirt_screenWidth - 20;
+  int screenPercentage = (percentage*barWidth)/100;
+  struct timeval current;
+
+  printf("\r%c[K", 27);
+  printf("%3d%% [", percentage);
+
+  for (int i = 0; i < barWidth; i++) {
+    if (screenPercentage > i) {
+      printf("=");
+    } else if (screenPercentage == i) {
+      printf(">");
+    } else {
+      printf(" ");
+    }
+  }
+  printf("] ");
+
+  gettimeofday(&current, NULL);
+  long seconds = current.tv_sec - start->tv_sec;
+  long micros = ((seconds * 1000000) + current.tv_usec) - start->tv_usec;
+  util_printFormatSpeed(total, ((double)micros)/1000000.0f);
+  fflush(stdout);
+}
+
+
 
 const char*
 util_amigaBaseName(const char* filename)

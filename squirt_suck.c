@@ -1,27 +1,16 @@
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <string.h>
-#include <ncurses.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
 #include <unistd.h>
-#include <locale.h>
-#include <libgen.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/uio.h>
 #include <sys/time.h>
-#include <sys/stat.h>
+
 #include "squirt.h"
 #include "common.h"
 
 static int socketFd = 0;
 static int fileFd = 0;
 static char* readBuffer = 0;
-static int screenWidth;
 static struct timeval squirt_suckStart;
 
 
@@ -44,6 +33,7 @@ cleanup(void)
   }
 }
 
+
 static void
 cleanupAndExit(uint32_t errorCode)
 {
@@ -65,68 +55,6 @@ fatalError(const char *format, ...)
 }
 
 
-static void
-printFormatSpeed(int32_t size, double elapsed)
-{
-  double speed = (double)size/elapsed;
-  if (speed < 1000) {
-    printf("%0.2f b/s", speed);
-  } else if (speed < 1000000) {
-    printf("%0.2f kB/s", speed/1000.0f);
-  } else {
-    printf("%0.2f MB/s", speed/1000000.0f);
-  }
-}
-
-
-static void
-printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
-{
-  int percentage;
-
-  if (fileLength) {
-    percentage = (total*100)/fileLength;
-  } else {
-    percentage = 100;
-  }
-  int barWidth = screenWidth - 20;
-  int screenPercentage = (percentage*barWidth)/100;
-  struct timeval current;
-
-  printf("\r%c[K", 27);
-  printf("%3d%% [", percentage);
-
-  for (int i = 0; i < barWidth; i++) {
-    if (screenPercentage > i) {
-      printf("=");
-    } else if (screenPercentage == i) {
-      printf(">");
-    } else {
-      printf(" ");
-    }
-  }
-  printf("] ");
-
-  gettimeofday(&current, NULL);
-  long seconds = current.tv_sec - start->tv_sec;
-  long micros = ((seconds * 1000000) + current.tv_usec) - start->tv_usec;
-  printFormatSpeed(total, ((double)micros)/1000000.0f);
-  fflush(stdout);
-}
-
-
-static void
-getWindowSize(void)
-{
-  initscr();
-  int ydim;
-  (void)ydim;
-  getmaxyx(stdscr, ydim, screenWidth);
-  endwin();
-}
-
-
-
 uint32_t
 squirt_suckFile(const char* hostname, const char* filename)
 {
@@ -134,9 +62,6 @@ squirt_suckFile(const char* hostname, const char* filename)
   struct sockaddr_in sockAddr;
 
   fflush(stdout);
-
-  setlocale(LC_NUMERIC, "");
-  getWindowSize();
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed");
@@ -200,7 +125,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 	fflush(stdout);
 	fatalError("\n%s failed to read", squirt_argv0);
       } else {
-	printProgress(&squirt_suckStart, total, fileLength);
+	util_printProgress(&squirt_suckStart, total, fileLength);
 	int readLen;
 	if ((readLen = write(fileFd, readBuffer, len)) != len) {
 	  fflush(stdout);
@@ -211,7 +136,7 @@ squirt_suckFile(const char* hostname, const char* filename)
     } while (total < fileLength);
   }
 
-  printProgress(&squirt_suckStart, total, fileLength);
+  util_printProgress(&squirt_suckStart, total, fileLength);
 
   fflush(stdout);
 
@@ -219,6 +144,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   return total;
 }
+
 
 int
 squirt_suck(int argc, char* argv[])
@@ -240,7 +166,7 @@ squirt_suck(int argc, char* argv[])
   fflush(stdout);
 
   printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", argv[2], baseName, length, ((double)micros)/1000000.0f);
-  printFormatSpeed(length, ((double)micros)/1000000.0f);
+  util_printFormatSpeed(length, ((double)micros)/1000000.0f);
   printf("\n");
 
   cleanupAndExit(EXIT_SUCCESS);

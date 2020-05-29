@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 
 extern const char* squirt_argv0;
+extern int squirt_screenWidth;
 
 char*
 util_recvLatin1AsUtf8(int socketFd, uint32_t length);
@@ -24,6 +25,12 @@ util_recvU32(int socketFd, uint32_t *data);
 
 const char*
 util_amigaBaseName(const char* filename);
+
+void
+util_printFormatSpeed(int32_t size, double elapsed);
+
+void
+util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength);
 
 int
 squirt_cli(int argc, char* argv[]);

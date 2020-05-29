@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #include <proto/exec.h>
 #include <proto/socket.h>
 #include <proto/dos.h>
@@ -15,7 +16,7 @@ static BPTR exec_inputFd, exec_outputFd;
 static void
 exec_runner(void)
 {
-  squirtd_error = SystemTags(exec_command, SYS_Output, exec_outputFd, TAG_DONE, 0) == 0 ? 0 : ERROR_EXEC_FAILED;
+  squirtd_error = SystemTags((APTR)exec_command, SYS_Output, exec_outputFd, TAG_DONE, 0) == 0 ? 0 : ERROR_EXEC_FAILED;
 
   if (exec_outputFd) {
     Close(exec_outputFd);
@@ -29,17 +30,17 @@ exec_run(const char* command, int socketFd)
   exec_command = command;
   const char* pipe = "PIPE:";
 
-  if ((exec_outputFd = Open(pipe, MODE_NEWFILE)) == 0) {
+  if ((exec_outputFd = Open((APTR)pipe, MODE_NEWFILE)) == 0) {
     squirtd_error = ERROR_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
 
-  if ((exec_inputFd = Open(pipe, MODE_OLDFILE)) == 0) {
+  if ((exec_inputFd = Open((APTR)pipe, MODE_OLDFILE)) == 0) {
     squirtd_error = ERROR_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
 
-  CreateNewProcTags(NP_Entry, exec_runner, TAG_DONE, 0);
+  CreateNewProcTags(NP_Entry, (uint32_t)exec_runner, TAG_DONE, 0);
 
   char buffer[16];
   int length = sizeof(buffer);
@@ -63,7 +64,7 @@ exec_dir(const char* dir, int socketFd)
   struct ExAllControl*  eac = 0;
   void* data = 0;
 
-  BPTR lock = Lock(dir, ACCESS_READ);
+  BPTR lock = Lock((APTR)dir, ACCESS_READ);
 
   if (!lock) {
     squirtd_error = ERROR_FILE_READ_FAILED;
@@ -93,11 +94,11 @@ exec_dir(const char* dir, int socketFd)
     }
     struct ExAllData *ead = (struct ExAllData *) data;
     do {
-      uint32_t nameLength = strlen(ead->ed_Name);
-      uint32_t commentLength = strlen(ead->ed_Comment);
+      uint32_t nameLength = strlen((char*)ead->ed_Name);
+      uint32_t commentLength = strlen((char*)ead->ed_Comment);
       printf("%s commentLength %d\n", ead->ed_Name, commentLength);
       if (send(socketFd, (void*)&nameLength, sizeof(nameLength), 0) != sizeof(nameLength) ||
-	  send(socketFd, ead->ed_Name, nameLength, 0) != nameLength ||
+	  send(socketFd, ead->ed_Name, nameLength, 0) != (int)nameLength ||
 	  send(socketFd, (void*)&ead->ed_Type, sizeof(ead->ed_Type), 0) != sizeof(ead->ed_Type) ||
 	  send(socketFd, (void*)&ead->ed_Size, sizeof(ead->ed_Size), 0) != sizeof(ead->ed_Size) ||
 	  send(socketFd, (void*)&ead->ed_Prot, sizeof(ead->ed_Prot), 0) != sizeof(ead->ed_Prot) ||
@@ -105,7 +106,7 @@ exec_dir(const char* dir, int socketFd)
 	  send(socketFd, (void*)&ead->ed_Mins, sizeof(ead->ed_Mins), 0) != sizeof(ead->ed_Mins) ||
 	  send(socketFd, (void*)&ead->ed_Ticks, sizeof(ead->ed_Ticks), 0) != sizeof(ead->ed_Ticks) ||
 	  send(socketFd, (void*)&commentLength, sizeof(commentLength), 0) != sizeof(commentLength) ||
-	  send(socketFd, ead->ed_Comment, commentLength, 0) != commentLength) {
+	  send(socketFd, ead->ed_Comment, commentLength, 0) != (int)commentLength) {
 	squirtd_error = ERROR_SEND_FAILED;
 	goto cleanup;
       }
@@ -135,7 +136,7 @@ exec_dir(const char* dir, int socketFd)
 void
 exec_cd(const char* dir, int socketFd)
 {
-  BPTR lock = Lock(dir, ACCESS_READ);
+  BPTR lock = Lock((APTR)dir, ACCESS_READ);
 
   if (!lock) {
     squirtd_error = ERROR_CD_FAILED;

@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +17,17 @@ static char* filename = 0;
 static char* rxBuffer = 0;
 static BPTR outputFd = 0;
 static BPTR inputFd = 0;
+
+#ifdef __GNUC__
+struct Library *SocketBase = 0;
+
+void _cleanup(void)
+{
+  if (SocketBase) {
+    CloseLibrary(SocketBase);
+  }
+}
+#endif
 
 
 static void
@@ -75,7 +87,7 @@ file_get(const char* destFolder, uint32_t nameLength)
   filename = malloc(fullPathLen+1);
   strcpy(filename, destFolder);
 
-  if (recv(acceptFd, filename+destFolderLen, nameLength, 0) != nameLength) {
+  if (recv(acceptFd, filename+destFolderLen, nameLength, 0) != (int)nameLength) {
     return ERROR_RECV_FAILED;
   }
 
@@ -88,9 +100,9 @@ file_get(const char* destFolder, uint32_t nameLength)
 
   fileLength = ntohl(fileLength);
 
-  DeleteFile(filename);
+  DeleteFile((APTR)filename);
 
-  if ((outputFd = Open(filename, MODE_NEWFILE)) == 0) {
+  if ((outputFd = Open((APTR)filename, MODE_NEWFILE)) == 0) {
     return ERROR_CREATE_FILE_FAILED;
   }
 
@@ -120,7 +132,7 @@ file_get(const char* destFolder, uint32_t nameLength)
 int16_t
 file_send(void)
 {
-  BPTR lock = Lock(filename, ACCESS_READ);
+  BPTR lock = Lock((APTR)filename, ACCESS_READ);
   if (!lock) {
     return ERROR_FILE_READ_FAILED;
   }
@@ -129,7 +141,6 @@ file_send(void)
   Examine(lock, &fileInfo);
   UnLock(lock);
   uint32_t fileSize = fileInfo.fib_Size;
-  uint32_t fileNameLength = strlen(filename);
 
   if (send(acceptFd, (void*)&fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
     return ERROR_SEND_FAILED;
@@ -139,7 +150,7 @@ file_send(void)
     return 0;
   }
 
-  inputFd = Open(filename, MODE_OLDFILE);
+  inputFd = Open((APTR)filename, MODE_OLDFILE);
 
   if (!inputFd) {
     printf("open failed %s\n", filename);
@@ -148,7 +159,7 @@ file_send(void)
 
   rxBuffer = malloc(BLOCK_SIZE);
 
-  int total = 0;
+  uint32_t total = 0;
   do {
     int len;
     if ((len = Read(inputFd, rxBuffer, BLOCK_SIZE) ) < 0) {
@@ -165,6 +176,7 @@ file_send(void)
   return 0;
 }
 
+
 int
 main(int argc, char **argv)
 {
@@ -174,6 +186,14 @@ main(int argc, char **argv)
 
   struct Process *me = (struct Process*)FindTask(0);
   me->pr_WindowPtr = (APTR)-1; // disable requesters
+
+#ifdef __GNUC__
+  atexit(_cleanup);
+  SocketBase = OpenLibrary((APTR)"bsdsocket.library", 4);
+  if (!SocketBase) {
+    fatalError("failed to open bsdsocket.library");
+  }
+#endif
 
   struct sockaddr_in sa = {0};
   sa.sin_family = AF_INET;
@@ -206,7 +226,7 @@ main(int argc, char **argv)
   }
 
   LONG socketTimeout = 1000;
-  setsockopt(acceptFd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&socketTimeout, sizeof(socketTimeout));
+  setsockopt(acceptFd, SOL_SOCKET, SO_RCVTIMEO, (char*)&socketTimeout, sizeof(socketTimeout));
 
   uint8_t command;
   if (recv(acceptFd, (void*)&command, sizeof(command), 0) != sizeof(command)) {
@@ -225,7 +245,7 @@ main(int argc, char **argv)
   if (command != SQUIRT_COMMAND_SQUIRT) {
     filename = malloc(nameLength+1);
 
-    if (recv(acceptFd, filename, nameLength, 0) != nameLength) {
+    if (recv(acceptFd, filename, nameLength, 0) != (int)nameLength) {
       squirtd_error = ERROR_RECV_FAILED;
       goto cleanup;
     }

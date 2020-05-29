@@ -18,7 +18,7 @@ typedef enum {
   ERROR_CD_FAILED,
   ERROR_FAILED_TO_CREATE_OS_RESOURCE,
   ERROR_EXEC_FAILED,
-} error_t;
+} _error_t;
 
 static const int BLOCK_SIZE = 8192;
 static const int NETWORK_PORT = 6969;
