@@ -49,8 +49,10 @@ fatalError(const char *format, ...)
 {
   va_list args;
   va_start(args, format);
+  fprintf(stderr, "%s: ", squirt_argv0);
   vfprintf(stderr, format, args);
   va_end(args);
+  fprintf(stderr, "\n");
   cleanupAndExit(EXIT_FAILURE);
 }
 
@@ -121,13 +123,13 @@ squirt(int argc, char* argv[])
   const char* fullPathname;
 
   if (argc != 3) {
-    fatalError("usage: %s hostname filename\n", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
   }
 
   fullPathname = argv[2];
 
   if (stat(fullPathname, &st) == -1) {
-    fatalError("%s: filed to stat %s\n", squirt_argv0, fullPathname);
+    fatalError("filed to stat %s", fullPathname);
   }
 
   fileLength = st.st_size;
@@ -136,38 +138,38 @@ squirt(int argc, char* argv[])
   getWindowSize();
 
   if (!util_getSockAddr(argv[1], NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed\n");
+    fatalError("getSockAddr() failed");
   }
 
   if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed\n");
+    fatalError("socket() failed");
   }
 
   if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed\n");
+    fatalError("connect() failed");
   }
 
   uint8_t commandCode = SQUIRT_COMMAND_SQUIRT;
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed\n");
+    fatalError("send() commandCode failed");
   }
 
   const char* filename = basename((char*)fullPathname);
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
-    fatalError("%s send() name failed\n", squirt_argv0);
+    fatalError("send() name failed");
   }
 
   int32_t networkFileLength = htonl(fileLength);
 
   if (send(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
-    fatalError("send() fileLength failed\n");
+    fatalError("send() fileLength failed");
   }
 
   fileFd = open(fullPathname, O_RDONLY);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", squirt_argv0, fullPathname);
+    fatalError("failed to open %s", fullPathname);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
@@ -179,11 +181,11 @@ squirt(int argc, char* argv[])
   do {
     int len;
     if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
-      fatalError("%s failed to read %s\n", squirt_argv0, fullPathname);
+      fatalError("failed to read %s", fullPathname);
     } else {
       printProgress(&start, total, fileLength);
       if (send(socketFd, readBuffer, len, 0) != len) {
-	fatalError("send() failed\n");
+	fatalError("send() failed");
       }
       total += len;
     }
@@ -195,7 +197,7 @@ squirt(int argc, char* argv[])
   uint32_t error;
 
   if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-    fatalError("failed to read remote status\n");
+    fatalError("failed to read remote status");
   }
 
   error = ntohl(error);

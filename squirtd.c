@@ -1,17 +1,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef AMIGA
 #include <proto/exec.h>
 #include <proto/socket.h>
 #include <proto/dos.h>
-#else
-#include <stdio.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif
 
 #include "common.h"
 #include "squirtd.h"
@@ -22,8 +14,8 @@ static int socketFd = 0;
 static int acceptFd = 0;
 static char* filename = 0;
 static char* rxBuffer = 0;
-static file_handle_t outputFd = 0;
-static file_handle_t inputFd = 0;
+static BPTR outputFd = 0;
+static BPTR inputFd = 0;
 
 
 static void
@@ -68,15 +60,9 @@ cleanup(void)
 }
 
 
-#ifdef AMIGA
 static void
 _fatalError(void)
-#else
-static void
-_fatalError(const char *msg)
-#endif
 {
-  fprintf(stderr, "%s", msg);
   cleanup();
   exit(1);
 }
@@ -134,7 +120,6 @@ file_get(const char* destFolder, uint32_t nameLength)
 int16_t
 file_send(void)
 {
-#ifdef AMIGA
   BPTR lock = Lock(filename, ACCESS_READ);
   if (!lock) {
     return ERROR_FILE_READ_FAILED;
@@ -177,7 +162,6 @@ file_send(void)
 
   } while (total < fileSize);
 
-#endif
   return 0;
 }
 
@@ -187,6 +171,9 @@ main(int argc, char **argv)
   if (argc != 2) {
     fatalError("squirtd: dest_folder\n");
   }
+
+  struct Process *me = (struct Process*)FindTask(0);
+  me->pr_WindowPtr = (APTR)-1; // disable requesters
 
   struct sockaddr_in sa = {0};
   sa.sin_family = AF_INET;

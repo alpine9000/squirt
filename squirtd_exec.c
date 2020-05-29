@@ -1,4 +1,3 @@
-#ifdef AMIGA
 #include <proto/exec.h>
 #include <proto/socket.h>
 #include <proto/dos.h>
@@ -11,7 +10,7 @@
 #include "common.h"
 
 static const char* exec_command;
-static file_handle_t exec_inputFd, exec_outputFd;
+static BPTR exec_inputFd, exec_outputFd;
 
 static void
 exec_runner(void)
@@ -155,27 +154,3 @@ exec_cd(const char* dir, int socketFd)
     send(socketFd, &buffer, 1, 0);
   }
 }
-
-
-#else // AMIGA
-
-void
-exec_cd(const char* dir)
-{
-  (void)dir;
-}
-
-void
-exec_run(const char* command, int socketFd)
-{
-  (void)command;
-  (void)socketFd;
-}
-
-void
-exec_dir(const char* dir, int socketFd)
-{
-  (void)dir;
-  (void)socketFd;
-}
-#endif

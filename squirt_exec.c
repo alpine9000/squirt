@@ -27,7 +27,7 @@ cleanupAndExit(int errorCode)
   if (command) {
     free(command);
   }
-  
+
   if (socketFd) {
     close(socketFd);
     socketFd = 0;
@@ -42,8 +42,10 @@ fatalError(const char *format, ...)
 {
   va_list args;
   va_start(args, format);
+  fprintf(stderr, "%s: ", squirt_argv0);
   vfprintf(stderr, format, args);
   va_end(args);
+  fprintf(stderr, "\n");
   cleanupAndExit(EXIT_FAILURE);
 }
 
@@ -53,7 +55,7 @@ squirt_cli(int argc, char* argv[])
   struct sockaddr_in sockAddr;
 
   if (argc < 3) {
-    fatalError("usage: %s hostname command to be executed\n", argv[0]);
+    fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
   }
 
   uint8_t commandCode;
@@ -82,24 +84,24 @@ squirt_cli(int argc, char* argv[])
   }
 
   if (!util_getSockAddr(argv[1], NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed\n");
+    fatalError("getSockAddr() failed");
   }
 
   if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed\n");
+    fatalError("socket() failed");
   }
 
   if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed\n");
+    fatalError("connect() failed");
   }
 
 
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed\n");
+    fatalError("send() commandCode failed");
   }
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
-    fatalError("%s: send() command failed\n", squirt_argv0);
+    fatalError("send() command failed");
   }
 
   uint8_t c;
@@ -118,15 +120,14 @@ squirt_cli(int argc, char* argv[])
   uint32_t error;
 
   if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
-    fatalError("failed to read remote status\n");
+    fatalError("failed to read remote status");
   }
 
   error = ntohl(error);
 
   if (ntohl(error) != 0) {
-    fatalError("%s: %s\n", argv[0], util_getErrorString(error));
+    fatalError("%s", util_getErrorString(error));
   }
-
 
   cleanupAndExit(EXIT_SUCCESS);
 

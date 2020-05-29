@@ -1,9 +1,10 @@
-#include <ncurses.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ncurses.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -44,10 +45,10 @@ cleanup(void)
 }
 
 static void
-cleanupAndExit(void)
+cleanupAndExit(uint32_t errorCode)
 {
   cleanup();
-  exit(0);
+  exit(errorCode);
 }
 
 
@@ -56,9 +57,11 @@ fatalError(const char *format, ...)
 {
   va_list args;
   va_start(args, format);
+  fprintf(stderr, "%s: ", squirt_argv0);
   vfprintf(stderr, format, args);
   va_end(args);
-  cleanupAndExit();
+  fprintf(stderr, "\n");
+  cleanupAndExit(EXIT_FAILURE);
 }
 
 
@@ -136,32 +139,32 @@ squirt_suckFile(const char* hostname, const char* filename)
   getWindowSize();
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed\n");
+    fatalError("getSockAddr() failed");
   }
 
   if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed\n");
+    fatalError("socket() failed");
   }
 
   if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed\n");
+    fatalError("connect() failed");
   }
 
   uint8_t commandCode = SQUIRT_COMMAND_SUCK;
 
   if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed\n");
+    fatalError("send() commandCode failed");
   }
 
 
   if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
-    fatalError("%s: send() filename failed\n", squirt_argv0);
+    fatalError("send() filename failed");
   }
 
   uint32_t networkFileLength;
 
   if (util_recv(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(networkFileLength)) {
-    fatalError("util_recv() Filelength failed\n");
+    fatalError("util_recv() Filelength failed");
   }
 
   uint32_t fileLength = ntohl(networkFileLength);
@@ -174,7 +177,7 @@ squirt_suckFile(const char* hostname, const char* filename)
   fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC, 0777);
 
   if (!fileFd) {
-    fatalError("%s: failed to open %s\n", squirt_argv0, baseName);
+    fatalError("failed to open %s", baseName);
   }
 
   readBuffer = malloc(BLOCK_SIZE);
@@ -195,13 +198,13 @@ squirt_suckFile(const char* hostname, const char* filename)
       }
       if ((len = read(socketFd, readBuffer, requestLength) ) < 0) {
 	fflush(stdout);
-	fatalError("\n%s failed to read\n", squirt_argv0);
+	fatalError("\n%s failed to read", squirt_argv0);
       } else {
 	printProgress(&squirt_suckStart, total, fileLength);
 	int readLen;
 	if ((readLen = write(fileFd, readBuffer, len)) != len) {
 	  fflush(stdout);
-	  fatalError("\n%s failed to write to %s %d\n", squirt_argv0, baseName, readLen);
+	  fatalError("\nailed to write to %s %d",  baseName, readLen);
 	}
 	total += len;
       }
@@ -221,7 +224,7 @@ int
 squirt_suck(int argc, char* argv[])
 {
   if (argc != 3) {
-    fatalError("usage: %s hostname filename\n", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
   }
 
   uint32_t length = squirt_suckFile(argv[1], argv[2]);
@@ -240,7 +243,7 @@ squirt_suck(int argc, char* argv[])
   printFormatSpeed(length, ((double)micros)/1000000.0f);
   printf("\n");
 
-  cleanupAndExit();
+  cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }

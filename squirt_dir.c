@@ -1,10 +1,10 @@
-#include <time.h>
-#include <ncurses.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <time.h>
+#include <ncurses.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -701,7 +701,7 @@ squirt_dir(int argc, char* argv[])
   squirt_argv0 = argv[0];
 
   if (argc != 3) {
-    fatalError("usage: %s hostname dir_name", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
   }
 
   hostname = argv[1];
@@ -719,7 +719,7 @@ squirt_backup(int argc, char* argv[])
   currentDir = 0;
 
   if (argc != 3) {
-    fatalError("usage: %s hostname dir_name", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
   }
 
   hostname = argv[1];
