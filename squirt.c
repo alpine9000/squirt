@@ -85,7 +85,7 @@ squirt(int argc, char* argv[])
   }
 
   uint8_t commandCode = SQUIRT_COMMAND_SQUIRT;
-  if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
 
@@ -97,11 +97,11 @@ squirt(int argc, char* argv[])
 
   int32_t networkFileLength = htonl(fileLength);
 
-  if (send(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
+  if (send(socketFd, (const void*)&networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
     fatalError("send() fileLength failed");
   }
 
-  fileFd = open(fullPathname, O_RDONLY);
+  fileFd = util_open(fullPathname, O_RDONLY);
 
   if (!fileFd) {
     fatalError("failed to open %s", fullPathname);
@@ -109,7 +109,7 @@ squirt(int argc, char* argv[])
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("squirting %s (%'d bytes)\n", filename, fileLength);
+  printf("squirting %s (%s bytes)\n", filename, util_formatNumber(fileLength));
 
   gettimeofday(&start, NULL);
 
@@ -118,11 +118,14 @@ squirt(int argc, char* argv[])
     if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
       fatalError("failed to read %s", fullPathname);
     } else {
-      util_printProgress(&start, total, fileLength);
-      if (send(socketFd, readBuffer, len, 0) != len) {
+      if ((send(socketFd, readBuffer, len, 0)) != len) {
 	fatalError("send() failed");
       }
+      int old = total;
       total += len;
+      if (((((old*100)/fileLength))/100) - (((total*100)/fileLength)/100) > 2) {
+	util_printProgress(&start, total, fileLength);
+      }
     }
 
   } while (total < fileLength);
@@ -131,7 +134,7 @@ squirt(int argc, char* argv[])
 
   uint32_t error;
 
-  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
     fatalError("failed to read remote status");
   }
 
@@ -141,7 +144,7 @@ squirt(int argc, char* argv[])
     gettimeofday(&end, NULL);
     long seconds = end.tv_sec - start.tv_sec;
     long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
-    printf("\nsquirted %s (%'d bytes) in %0.02f seconds ", filename, fileLength, ((double)micros)/1000000.0f);
+    printf("\nsquirted %s (%s bytes) in %0.02f seconds ", filename, util_formatNumber(fileLength), ((double)micros)/1000000.0f);
     util_printFormatSpeed(fileLength, ((double)micros)/1000000.0f);
     printf("\n");
   } else {

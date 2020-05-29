@@ -1,9 +1,23 @@
 #pragma once
 
+#ifndef _WIN32
 #include <netinet/in.h>
+#else
+#include <stdint.h>
+#include <winsock.h>
+#endif
 
 extern const char* squirt_argv0;
 extern int squirt_screenWidth;
+
+const char*
+util_formatNumber(int number);
+
+int
+util_mkdir(const char *path, uint32_t mode);
+
+int
+util_open(const char* filename, uint32_t mode);
 
 char*
 util_recvLatin1AsUtf8(int socketFd, uint32_t length);

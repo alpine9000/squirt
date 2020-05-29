@@ -77,7 +77,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   uint8_t commandCode = SQUIRT_COMMAND_SUCK;
 
-  if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
 
@@ -107,7 +107,7 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("sucking %s (%'d bytes)\n", filename, fileLength);
+  printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
 
   fflush(stdout);
 
@@ -121,7 +121,7 @@ squirt_suckFile(const char* hostname, const char* filename)
       } else {
 	requestLength = fileLength - total;
       }
-      if ((len = read(socketFd, readBuffer, requestLength) ) < 0) {
+      if ((len = util_recv(socketFd, readBuffer, requestLength, 0)) < 0) {
 	fflush(stdout);
 	fatalError("\n%s failed to read", squirt_argv0);
       } else {
@@ -165,7 +165,7 @@ squirt_suck(int argc, char* argv[])
 
   fflush(stdout);
 
-  printf("\nsucked %s -> %s (%'d bytes) in %0.02f seconds ", argv[2], baseName, length, ((double)micros)/1000000.0f);
+  printf("\nsucked %s -> %s (%s bytes) in %0.02f seconds ", argv[2], baseName, util_formatNumber(length), ((double)micros)/1000000.0f);
   util_printFormatSpeed(length, ((double)micros)/1000000.0f);
   printf("\n");
 

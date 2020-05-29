@@ -1,10 +1,15 @@
 #pragma once
+#include <stdint.h>
+//#define DEBUG_OUTPUT
 
-#define SOCKLEN_T LONG
-//#include <stdio.h>
+#ifdef DEBUG_OUTPUT
+#include <stdio.h>
+#define fatalError(x) _fatalError(x)
+#else
 #define printf(...)
 #define fprintf(...)
 #define fatalError(x) _fatalError()
+#endif
 
 extern uint32_t squirtd_error;
 void exec_run(const char* command, int socketFd);

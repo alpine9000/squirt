@@ -9,7 +9,7 @@ typedef enum {
 } command_t;
 
 typedef enum {
-  ERROR_SUCCESS,
+  _ERROR_SUCCESS,
   ERROR_RECV_FAILED,
   ERROR_SEND_FAILED,
   ERROR_CREATE_FILE_FAILED,

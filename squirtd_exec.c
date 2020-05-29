@@ -1,10 +1,6 @@
-#include <sys/types.h>
-#include <proto/exec.h>
 #include <proto/socket.h>
 #include <proto/dos.h>
 #include <dos/dostags.h>
-#include <dos/exall.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "squirtd.h"
@@ -12,6 +8,7 @@
 
 static const char* exec_command;
 static BPTR exec_inputFd, exec_outputFd;
+
 
 static void
 exec_runner(void)
@@ -58,6 +55,7 @@ exec_run(const char* command, int socketFd)
   }
 }
 
+
 void
 exec_dir(const char* dir, int socketFd)
 {
@@ -96,7 +94,6 @@ exec_dir(const char* dir, int socketFd)
     do {
       uint32_t nameLength = strlen((char*)ead->ed_Name);
       uint32_t commentLength = strlen((char*)ead->ed_Comment);
-      printf("%s commentLength %d\n", ead->ed_Name, commentLength);
       if (send(socketFd, (void*)&nameLength, sizeof(nameLength), 0) != sizeof(nameLength) ||
 	  send(socketFd, ead->ed_Name, nameLength, 0) != (int)nameLength ||
 	  send(socketFd, (void*)&ead->ed_Type, sizeof(ead->ed_Type), 0) != sizeof(ead->ed_Type) ||

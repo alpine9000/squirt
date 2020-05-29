@@ -73,8 +73,13 @@ cleanup(void)
 
 
 static void
+#ifdef DEBUG_OUTPUT
+_fatalError(char* msg)
+#else
 _fatalError(void)
+#endif
 {
+  fprintf(stderr, msg);
   cleanup();
   exit(1);
 }

@@ -1,16 +1,21 @@
 #include <stdio.h>
 #include <string.h>
-#include <netdb.h>
-#include <iconv.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <sys/time.h>
+#include <iconv.h>
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <netdb.h>
 #include <arpa/inet.h>
+#endif
 
 #include "squirt.h"
 #include "common.h"
 
 static const char* errors[] = {
-  [ERROR_SUCCESS] = "Unknown error",
+  [_ERROR_SUCCESS] = "Unknown error",
   [ERROR_RECV_FAILED] = "recv failed",
   [ERROR_SEND_FAILED] = "send failed",
   [ERROR_CREATE_FILE_FAILED] = "create file failed",
@@ -20,6 +25,45 @@ static const char* errors[] = {
   [ERROR_FAILED_TO_CREATE_OS_RESOURCE] = "failed to create os resource",
   [ERROR_EXEC_FAILED] = "exec failed",
 };
+
+int
+util_mkdir(const char *path, uint32_t mode)
+{
+#ifndef _WIN32
+  return mkdir(path, mode);
+#else
+  (void)mode;
+  DWORD dwAttrib = GetFileAttributes(path);
+
+  if (!(dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY))) {
+    return !CreateDirectory(path, NULL);
+  }
+
+  return 0;
+#endif
+}
+
+const char*
+util_formatNumber(int number)
+{
+  static char buffer[256];
+#ifdef _WIN32
+  snprintf(buffer, sizeof(buffer), "%d", number);
+#else
+  snprintf(buffer, sizeof(buffer), "%'d", number);
+#endif
+  return buffer;
+}
+
+int
+util_open(const char* filename, uint32_t mode)
+{
+#ifdef _WIN32
+  return open(filename, mode|O_BINARY);
+#else
+  return open(filename, mode);
+#endif
+}
 
 static char*
 util_utf8ToLatin1(const char* buffer)
@@ -32,6 +76,10 @@ util_utf8ToLatin1(const char* buffer)
   char* outptr = out;
   iconv(ic, &inptr, &insize, &outptr, &outsize);
   iconv_close(ic);
+  //#else
+  //  char* out = calloc(1, strlen(buffer));
+  //  strcpy(out, buffer);
+  //#endif
   return out;
 }
 
@@ -39,6 +87,7 @@ util_utf8ToLatin1(const char* buffer)
 static char*
 util_latin1ToUtf8(const char* _buffer)
 {
+  //#ifndef _WIN32
   iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
   char* buffer = malloc(strlen(_buffer)+1);
   strcpy(buffer, _buffer);
@@ -50,6 +99,10 @@ util_latin1ToUtf8(const char* _buffer)
   iconv(ic, &inptr, &insize, &outptr, &outsize);
   iconv_close(ic);
   free(buffer);
+  //#else
+  //  char* out = calloc(1, strlen(_buffer));
+  //  strcpy(out, _buffer);
+  //#endif
   return out;
 }
 
@@ -67,6 +120,7 @@ util_printFormatSpeed(int32_t size, double elapsed)
   }
 }
 
+
 void
 util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
 {
@@ -77,11 +131,16 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
   } else {
     percentage = 100;
   }
+
   int barWidth = squirt_screenWidth - 20;
   int screenPercentage = (percentage*barWidth)/100;
   struct timeval current;
 
+#ifndef _WIN32
   printf("\r%c[K", 27);
+#else
+  printf("\r");
+#endif
   printf("%3d%% [", percentage);
 
   for (int i = 0; i < barWidth; i++) {
@@ -99,7 +158,9 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
   long seconds = current.tv_sec - start->tv_sec;
   long micros = ((seconds * 1000000) + current.tv_usec) - start->tv_usec;
   util_printFormatSpeed(total, ((double)micros)/1000000.0f);
+#ifndef _WIN32
   fflush(stdout);
+#endif
 }
 
 
@@ -151,8 +212,8 @@ util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str)
   uint32_t length = strlen(latin1);
   uint32_t networkLength = htonl(length);
 
-  if (send(socketFd, &networkLength, sizeof(networkLength), 0) == sizeof(networkLength)) {
-    success = send(socketFd, latin1, length, 0) == length;
+  if (send(socketFd, (const void*)&networkLength, sizeof(networkLength), 0) == sizeof(networkLength)) {
+    success = send(socketFd, latin1, length, 0) == (int)length;
   }
 
   free(latin1);

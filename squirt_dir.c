@@ -165,9 +165,10 @@ printEntryList(dir_entry_list_t* list)
   dir_entry_t* entry = list->head;
   int maxSizeLength = 0;
 
+
   while (entry) {
     char buffer[255];
-    snprintf(buffer, sizeof(buffer), "%'d", entry->size);
+    snprintf(buffer, sizeof(buffer), "%s", util_formatNumber(entry->size));
     entry->renderedSizeLength = strlen(buffer);
     if (entry->renderedSizeLength > maxSizeLength) {
       maxSizeLength = entry->renderedSizeLength;
@@ -183,7 +184,7 @@ printEntryList(dir_entry_list_t* list)
       putchar(' ');
     }
 
-    if (printf("%'d %s %s%c", entry->size, formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
+    if (printf("%s %s %s%c", util_formatNumber(entry->size), formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
       perror("printf");
     }
     if (entry->comment) {
@@ -282,7 +283,7 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
     fatalError("connect() failed");
   }
 
-  if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
 
@@ -298,7 +299,7 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
 
   uint32_t error;
 
-  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
     fatalError("failed to read remote status");
   }
 
@@ -336,7 +337,7 @@ squirt_cd(const char* dir)
     fatalError("connect() failed");
   }
 
-  if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
 
@@ -359,7 +360,7 @@ squirt_cd(const char* dir)
 
   uint32_t error;
 
-  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
     fatalError("failed to read remote status");
   }
 
@@ -423,7 +424,8 @@ pushDir(const char* dir)
   if (!safe) {
     fatalError("failed to create safe name");
   }
-  int mkdirResult = mkdir(safe, 0777);
+
+  int mkdirResult = util_mkdir(safe, 0777);
 
   if (mkdirResult != 0 && errno != EEXIST) {
     fatalError("failed to mkdir %s", safe);
@@ -462,7 +464,7 @@ saveExAllData(dir_entry_t* entry, const char* path)
 {
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
-  mkdir(ident, 0777);
+  util_mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
   sprintf(name, "%s%s", ident, baseName);
   FILE *fp = fopen(name, "w");
@@ -555,7 +557,7 @@ readExAllData(dir_entry_t* entry, const char* path)
   }
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
-  mkdir(ident, 0777);
+  util_mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
   sprintf(name, "%s%s", ident, baseName);
   FILE *fp = fopen(name, "r+");
@@ -630,7 +632,7 @@ backupList(dir_entry_list_t* list)
 	dir_entry_t *temp = newDirEntry();
 	struct stat st;
 	if (stat(util_amigaBaseName(path), &st) == 0) {
-	  if (st.st_size == entry->size) {
+	  if (st.st_size == (off_t)entry->size) {
 	    skip = readExAllData(temp, path);
 	    if (skip) {
 	      skip = identicalExAllData(temp, entry);

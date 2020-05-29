@@ -87,7 +87,7 @@ squirt_cli(int argc, char* argv[])
   }
 
 
-  if (send(socketFd, &commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
 
@@ -96,6 +96,10 @@ squirt_cli(int argc, char* argv[])
   }
 
   uint8_t c;
+#ifdef _WIN32
+  char buffer[20];
+  int bindex = 0;
+#endif
   while (util_recv(socketFd, &c, 1, 0)) {
     if (c == 0) {
       break;
@@ -103,14 +107,28 @@ squirt_cli(int argc, char* argv[])
       fprintf(stdout, "%c[", 27);
       fflush(stdout);
     } else {
+#ifdef _WIN32
+      buffer[bindex++] = c;
+      if (bindex == sizeof(buffer)) {
+	write(1, buffer, bindex);
+	bindex = 0;
+      }
+#else
       int ignore = write(1, &c, 1);
       (void)ignore;
+#endif
     }
   }
 
+#ifdef _WIN32
+  if (bindex) {
+    write(1, buffer, bindex);
+  }
+#endif
+
   uint32_t error;
 
-  if (read(socketFd, &error, sizeof(error)) != sizeof(error)) {
+  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
     fatalError("failed to read remote status");
   }
 
