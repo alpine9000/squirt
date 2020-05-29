@@ -1,6 +1,6 @@
 # squirt - Remotely manage Amigas via TCP/IP from modern systems
 
-`squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage Amigas via TCP/IP from a set of command lines tools running on a more modern system.
+`squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage your Amiga over TCP/IP using set of command lines tools running on a modern system.
 
 You can:
  * Send (squirt) files
