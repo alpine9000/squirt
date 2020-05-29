@@ -1,6 +1,12 @@
-# squirt - Transfer files from modern computers to Amiga via TCP/IP
+# squirt - Remotely manage Amigas via TCP/IP from modern systems
 
-Push files quickly from a modern computer to an Amiga. `squirtd` is designed to be super small, use hardly any ram and transfer files as fast as possible. The Amiga `squirtd` executable is about `3.5Kb`.
+`squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage Amigas via TCP/IP from a set of command lines tools running on a more modern system.
+
+You can:
+ * Send (squirt) files
+ * Recieve (suck) files
+ * Run non interactive commands
+ * Perform incremental backups
 
 :radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
 
@@ -38,11 +44,21 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 
 ## squirting a file
 
-client usage is as follows:
-
     squirt hostname filename
 
 See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 with an XSurf-500.
+
+## sucking a file
+
+    squirt_suck hostname filename
+    
+## running a command
+
+    squirt_exec hostname command and arguments
+
+## backing up
+
+    squirt_backup hostname path_to_backup
 
 ![](images/demo.gif)
 
