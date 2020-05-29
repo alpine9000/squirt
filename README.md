@@ -1,4 +1,4 @@
-# squirt - Remotely manage Amigas via TCP/IP from modern systems
+# squirt - Remotely manage your Amiga over TCP/IP from modern systems
 
 `squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage your Amiga over TCP/IP using set of command lines tools running on a modern system.
 
@@ -6,6 +6,7 @@ You can:
  * Send (squirt) files
  * Recieve (suck) files
  * Run non interactive commands
+ * List directories
  * Perform incremental backups
 
 :radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
@@ -50,8 +51,6 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 
 ![](images/squirt.png)
 
-See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 with an XSurf-500.
-
 ## sucking a file
 
     squirt_suck hostname filename
@@ -69,3 +68,11 @@ See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 wit
     squirt_backup hostname path_to_backup
 
 ![](images/backup.png)
+
+## list directory
+
+    squirt_dir hostname path
+
+![](images/dir.png)
+
+
