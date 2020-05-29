@@ -46,20 +46,24 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 
     squirt hostname filename
 
+![](images/squirt.png)
+
 See below for a demo of squirting a 5mb file from a mac to my real Amiga 500 with an XSurf-500.
 
 ## sucking a file
 
     squirt_suck hostname filename
     
+![](images/suck.png)
+    
 ## running a command
 
     squirt_exec hostname command and arguments
+
+![](images/exec.png)
 
 ## backing up
 
     squirt_backup hostname path_to_backup
 
-![](images/demo.gif)
-
-![](images/aca500plus.png)
+![](images/backup.png)
