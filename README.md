@@ -42,6 +42,8 @@ Add the following to S:Network-Startup.
 
 where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
 
+## Management commands
+
 ## squirting a file
 
     squirt hostname filename
