@@ -54,9 +54,9 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 ## sucking a file
 
     squirt_suck hostname filename
-    
+
 ![](images/suck.png)
-    
+
 ## running a command
 
     squirt_exec hostname command and arguments
@@ -76,3 +76,12 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 ![](images/dir.png)
 
 
+# Copyright (c)
+
+Unless otherwise specified in the source file, all files are Copyright (c) 2020 Enable Software Pty Ltd
+
+This software is free software. You can redistribute it and/or modify it under the terms of the GNU Library General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+
+This software is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+You should have received a copy of the GNU Library General Public License along with libiberty; see the file LICENSE.

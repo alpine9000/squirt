@@ -6,6 +6,7 @@ typedef enum {
   SQUIRT_COMMAND_CD,
   SQUIRT_COMMAND_SUCK,
   SQUIRT_COMMAND_DIR,
+  SQUIRT_COMMAND_CWD
 } command_t;
 
 typedef enum {

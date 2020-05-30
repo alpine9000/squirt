@@ -1,5 +1,5 @@
 SQUIRTD_SRCS=squirtd.c squirtd_exec.c
-SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c util.c
+SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c squirt_cli.c squirt_cwd.c util.c argv.c
 
 CC=gcc
 VBCC_CC=vc
@@ -10,9 +10,9 @@ AMIGA_GCC=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-am
 DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined #-fanalyzer
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
 
-LIBS=-liconv
+LIBS=-liconv -lreadline
 
-CFLAGS=$(DEBUG_CFLAGS) -Os $(WARNINGS)
+CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
 AMIGA_GCC_CFLAGS=-Os -fomit-frame-pointer -noixemul $(WARNINGS)
 VBCC_CFLAGS=-O1 +aos68k -c99
 
@@ -21,7 +21,7 @@ SQUIRTD_AMIGA_GCC_OBJS= $(addprefix build/obj/amiga.gcc/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
-CLIENT_APPS=build/squirt_exec build/squirt_suck build/squirt_dir build/squirt_backup build/squirt
+CLIENT_APPS=build/squirt_exec build/squirt_suck build/squirt_dir build/squirt_backup build/squirt build/squirt_cli build/squirt_cwd
 SERVER_APPS=build/amiga/squirtd build/amiga/squirtd.vbcc
 
 all: $(CLIENT_APPS) $(SERVER_APPS)

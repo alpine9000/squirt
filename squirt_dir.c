@@ -10,31 +10,12 @@
 #include "squirt.h"
 #include "common.h"
 
-typedef struct direntry {
-  const char* name;
-  int32_t type;
-  uint32_t size;
-  uint32_t prot;
-  uint32_t days;
-  uint32_t mins;
-  uint32_t ticks;
-  const char* comment;
-  struct direntry* next;
-  int renderedSizeLength;
-} dir_entry_t;
-
-typedef struct {
-  dir_entry_t* head;
-  dir_entry_t* tail;
-} dir_entry_list_t;
-
 static const char* SQUIRT_EXALL_INFO_DIR_NAME = ".__squirt/";
-static char* hostname;
 static char* currentDir;
 static int socketFd = 0;
 
 static void
-squirt_backupDir(const char* dir);
+squirt_backupDir(const char* hostname, const char* dir);
 
 static void
 cleanup(void)
@@ -65,7 +46,6 @@ fatalError(const char *format, ...)
   fprintf(stderr, "\n");
   cleanupAndExit(EXIT_FAILURE);
 }
-
 
 static dir_entry_t*
 newDirEntry(void)
@@ -113,8 +93,8 @@ freeEntry(dir_entry_t* ptr)
 }
 
 
-static void
-freeEntryList(dir_entry_list_t* list)
+void
+squirt_dirFreeEntryList(dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
 
@@ -159,12 +139,14 @@ formatDateTime(dir_entry_t* entry)
 }
 
 
-static void
-printEntryList(dir_entry_list_t* list)
+//static
+void
+squirt_dirPrintEntryList(const char* hostname, dir_entry_list_t* list)
 {
+  (void)hostname;
+
   dir_entry_t* entry = list->head;
   int maxSizeLength = 0;
-
 
   while (entry) {
     char buffer[255];
@@ -212,7 +194,9 @@ getDirEntry(dir_entry_list_t* entryList)
   char* buffer = util_recvLatin1AsUtf8(socketFd, nameLength);
 
   if (!buffer) {
-    fatalError("failed to read name (%d bytes)", nameLength);
+    //    fatalError("failed to read name (%d bytes)", nameLength);
+    fprintf(stderr, "failed to read name\n");
+    return 0;
   }
 
   int32_t type;
@@ -264,11 +248,10 @@ getDirEntry(dir_entry_list_t* entryList)
   return 1;
 }
 
-
-static void
-squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
+dir_entry_list_t
+squirt_dirRead(const char* hostname, const char* command)
 {
-  struct sockaddr_in sockAddr;
+ struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_DIR;
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
@@ -303,24 +286,33 @@ squirt_processDir(const char* command, void(*process)(dir_entry_list_t*))
     fatalError("failed to read remote status");
   }
 
-  if (process) {
-    process(&entryList);
-  }
-
-  freeEntryList(&entryList);
-
-
   error = ntohl(error);
 
   if (ntohl(error) != 0) {
     fatalError("%s", util_getErrorString(error));
   }
+
   cleanup();
+
+  return entryList;
+}
+
+static void
+squirt_processDir(const char* hostname, const char* command, void(*process)(const char* hostname, dir_entry_list_t*))
+{
+
+  dir_entry_list_t entryList = squirt_dirRead(hostname, command);
+
+  if (process) {
+    process(hostname, &entryList);
+  }
+
+  squirt_dirFreeEntryList(&entryList);
 }
 
 
 static void
-squirt_cd(const char* dir)
+squirt_cd(const char* hostname, const char* dir)
 {
   struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_CD;
@@ -405,7 +397,7 @@ safeName(const char* name)
 
 
 static char*
-pushDir(const char* dir)
+pushDir(const char* hostname, const char* dir)
 {
   if (currentDir) {
     char* newDir = fullPath(dir);
@@ -418,7 +410,7 @@ pushDir(const char* dir)
     strcpy(currentDir, dir);
   }
 
-  squirt_cd(currentDir);
+  squirt_cd(hostname, currentDir);
 
   char* safe = safeName(dir);
   if (!safe) {
@@ -620,7 +612,7 @@ identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 
 
 static void
-backupList(dir_entry_list_t* list)
+backupList(const char* hostname, dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
 
@@ -661,7 +653,7 @@ backupList(dir_entry_list_t* list)
       const char* path = fullPath(entry->name);
       saveExAllData(entry, path);
       free((void*)path);
-      squirt_backupDir(entry->name);
+      squirt_backupDir(hostname, entry->name);
     }
     entry = entry->next;
   }
@@ -669,12 +661,12 @@ backupList(dir_entry_list_t* list)
 
 
 static void
-squirt_backupDir(const char* dir)
+squirt_backupDir(const char* hostname, const char* dir)
 {
-  char* cwd = pushDir(dir);
+  char* cwd = pushDir(hostname, dir);
   printf("%s/ \xE2\x9C\x93\n", currentDir);
 
-  squirt_processDir(currentDir, backupList);
+  squirt_processDir(hostname, currentDir, backupList);
 
   popDir(cwd);
 }
@@ -689,9 +681,7 @@ squirt_dir(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
   }
 
-  hostname = argv[1];
-
-  squirt_processDir(argv[2], printEntryList);
+  squirt_processDir(argv[1], argv[2], squirt_dirPrintEntryList);
 
   exit(EXIT_SUCCESS);
 
@@ -707,9 +697,7 @@ squirt_backup(int argc, char* argv[])
   if (argc != 3) {
     fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
   }
-
-  hostname = argv[1];
-
+  const char* hostname = argv[1];
   char* dirBuffer = 0;
   char* path = argv[2];
   char* token = strtok(path, ":");
@@ -720,12 +708,12 @@ squirt_backup(int argc, char* argv[])
     if (token) {
       dirBuffer = malloc(strlen(dir)+2);
       sprintf(dirBuffer, "%s:", dir);
-      pushDir(dirBuffer);
+      pushDir(hostname, dirBuffer);
       do {
 	dir = token;
 	token = strtok(0, "/");
 	if (token) {
-	  pushDir(dir);
+	  pushDir(hostname, dir);
 	}
       } while (token);
     } else {
@@ -736,7 +724,7 @@ squirt_backup(int argc, char* argv[])
   }
 
   if (dir) {
-    squirt_backupDir(dir);
+    squirt_backupDir(hostname, dir);
   }
 
   if (dirBuffer) {

@@ -1,5 +1,6 @@
 #include <proto/socket.h>
 #include <proto/dos.h>
+#include <proto/exec.h>
 #include <dos/dostags.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,25 +131,49 @@ exec_dir(const char* dir, int socketFd)
 }
 
 
+uint32_t
+exec_cwd(int socketFd)
+{
+  char name[108];
+  struct Process *me = (struct Process*)FindTask(0);
+  NameFromLock(me->pr_CurrentDir, (STRPTR)name, sizeof(name)-1);
+  int32_t len = strlen(name);
+
+  if (send(socketFd, &len, sizeof(len), 0) != sizeof(len)) {
+    return ERROR_SEND_FAILED;
+  }
+  if (send(socketFd, name, len, 0) != len) {
+    return ERROR_SEND_FAILED;
+  }
+
+  return _ERROR_SUCCESS;
+}
+
+
 void
 exec_cd(const char* dir, int socketFd)
 {
   BPTR lock = Lock((APTR)dir, ACCESS_READ);
+  char buffer = 1;
 
   if (!lock) {
     squirtd_error = ERROR_CD_FAILED;
     goto cleanup;
   }
 
-  BPTR oldLock = CurrentDir(lock);
+  struct FileInfoBlock fileInfo;
+  Examine(lock, &fileInfo);
 
-  if (oldLock) {
-    UnLock(oldLock);
+  if (fileInfo.fib_DirEntryType > 0) {
+    BPTR oldLock = CurrentDir(lock);
+
+    if (oldLock) {
+      UnLock(oldLock);
+      buffer = 0;
+    }
   }
 
  cleanup:
-  {
-    char buffer = 0;
-    send(socketFd, &buffer, 1, 0);
-  }
+  send(socketFd, &buffer, 1, 0);
+
 }

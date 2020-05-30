@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "argv.h"
 #include "squirt.h"
 #include "common.h"
 
@@ -12,17 +13,24 @@ static char* command = 0;
 
 
 static void
-cleanupAndExit(int errorCode)
+cleanup(void)
 {
   if (command) {
     free(command);
+    command = 0;
   }
 
   if (socketFd) {
     close(socketFd);
     socketFd = 0;
   }
+}
 
+
+static void
+cleanupAndExit(int errorCode)
+{
+  cleanup();
   exit(errorCode);
 }
 
@@ -39,42 +47,37 @@ fatalError(const char *format, ...)
   cleanupAndExit(EXIT_FAILURE);
 }
 
-
 int
-squirt_cli(int argc, char* argv[])
+squirt_execCmd(const char* hostname, int argc, char** argv)
 {
   struct sockaddr_in sockAddr;
-
-  if (argc < 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
-  }
 
   uint8_t commandCode;
   int commandLength = 0;
   socketFd = 0;
   command = 0;
 
-  if (argc == 4 && strcmp("cd", argv[2]) == 0) {
-    commandLength = strlen(argv[3]);
+  if (argc == 2 && strcmp("cd", argv[0]) == 0) {
+    commandLength = strlen(argv[1]);
     command = malloc(commandLength+1);
-    strcpy(command, argv[3]);
+    strcpy(command, argv[1]);
     commandCode = SQUIRT_COMMAND_CD;
   } else {
-    for (int i = 2; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
       commandLength += strlen(argv[i]);
       commandLength++;
     }
 
     command = malloc(commandLength+1);
-    strcpy(command, argv[2]);
-    for (int i = 3; i < argc; i++) {
+    strcpy(command, argv[0]);
+    for (int i = 1; i < argc; i++) {
       strcat(command, " ");
       strcat(command, argv[i]);
     }
     commandCode = SQUIRT_COMMAND_CLI;
   }
 
-  if (!util_getSockAddr(argv[1], NETWORK_PORT, &sockAddr)) {
+  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
     fatalError("getSockAddr() failed");
   }
 
@@ -86,7 +89,6 @@ squirt_cli(int argc, char* argv[])
     fatalError("connect() failed");
   }
 
-
   if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
     fatalError("send() commandCode failed");
   }
@@ -95,36 +97,38 @@ squirt_cli(int argc, char* argv[])
     fatalError("send() command failed");
   }
 
-  uint8_t c;
+  if (commandCode != SQUIRT_COMMAND_CD) {
+    uint8_t c;
 #ifdef _WIN32
-  char buffer[20];
-  int bindex = 0;
+    char buffer[20];
+    int bindex = 0;
 #endif
-  while (util_recv(socketFd, &c, 1, 0)) {
-    if (c == 0) {
-      break;
-    } else if (c == 0x9B) {
-      fprintf(stdout, "%c[", 27);
-      fflush(stdout);
-    } else {
+    while (util_recv(socketFd, &c, 1, 0)) {
+      if (c == 0) {
+	break;
+      } else if (c == 0x9B) {
+	fprintf(stdout, "%c[", 27);
+	fflush(stdout);
+      } else {
 #ifdef _WIN32
-      buffer[bindex++] = c;
-      if (bindex == sizeof(buffer)) {
-	write(1, buffer, bindex);
-	bindex = 0;
-      }
+	buffer[bindex++] = c;
+	if (bindex == sizeof(buffer)) {
+	  write(1, buffer, bindex);
+	  bindex = 0;
+	}
 #else
-      int ignore = write(1, &c, 1);
-      (void)ignore;
+	int ignore = write(1, &c, 1);
+	(void)ignore;
 #endif
+      }
     }
-  }
 
 #ifdef _WIN32
-  if (bindex) {
-    write(1, buffer, bindex);
-  }
+    if (bindex) {
+      write(1, buffer, bindex);
+    }
 #endif
+  }
 
   uint32_t error;
 
@@ -134,7 +138,29 @@ squirt_cli(int argc, char* argv[])
 
   error = ntohl(error);
 
-  if (ntohl(error) != 0) {
+  cleanup();
+
+  return error;
+}
+
+int
+squirt_exec(int argc, char* argv[])
+{
+  if (argc < 3) {
+    fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
+  }
+
+  const char* hostname = argv[1];
+
+  for (int i = 0; i < argc-2; i++) {
+    argv[i] = argv[i+2];
+  }
+
+  argc-=2;
+
+  uint32_t error = squirt_execCmd(hostname, argc, argv);
+
+  if (error != 0) {
     fatalError("%s", util_getErrorString(error));
   }
 

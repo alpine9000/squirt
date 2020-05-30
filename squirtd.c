@@ -265,6 +265,8 @@ main(int argc, char **argv)
       file_send();
     } else if (command == SQUIRT_COMMAND_DIR) {
       exec_dir(filename, acceptFd);
+    } else if (command == SQUIRT_COMMAND_CWD) {
+      exec_cwd(acceptFd);
     }
     goto cleanup;
   } else {

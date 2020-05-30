@@ -35,6 +35,10 @@ int main(int argc, char* argv[])
   }
 
   if (strstr(basename(argv[0]), "squirt_exec")) {
+    return squirt_exec(argc, argv);
+  }
+
+  if (strstr(basename(argv[0]), "squirt_cli")) {
     return squirt_cli(argc, argv);
   }
 
@@ -44,6 +48,10 @@ int main(int argc, char* argv[])
 
   if (strstr(basename(argv[0]), "squirt_backup")) {
     return squirt_backup(argc, argv);
+  }
+
+  if (strstr(basename(argv[0]), "squirt_cwd")) {
+    return squirt_cwd(argc, argv);
   }
 
   return squirt(argc, argv);
