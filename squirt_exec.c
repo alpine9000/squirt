@@ -103,9 +103,13 @@ squirt_execCmd(const char* hostname, int argc, char** argv)
     char buffer[20];
     int bindex = 0;
 #endif
+    int exitState = 0;
     while (util_recv(socketFd, &c, 1, 0)) {
       if (c == 0) {
-	break;
+	exitState++;
+	if (exitState == 4) {
+	  break;
+	}
       } else if (c == 0x9B) {
 	fprintf(stdout, "%c[", 27);
 	fflush(stdout);

@@ -132,15 +132,16 @@ exec_run(int fd, const char* command)
   CreateNewProcTags(NP_Entry, (uint32_t)exec_runner, TAG_DONE, 0);
 
   char buffer[16];
-  int length = sizeof(buffer);
-  while ((length = Read(exec_inputFd, buffer, length)) > 0) {
+  int length;
+  while ((length = Read(exec_inputFd, buffer, sizeof(buffer))) > 0) {
     send(fd, buffer, length, 0);
   }
 
  cleanup:
 
-  buffer[0] = 0;
-  send(fd, buffer, 1, 0);
+  // not exit status, sending 4 null bytes breaks out of the terminal read loop in squirt_execCmd
+  // reusing sendStatus for executable size
+  sendStatus(fd, 0);
 
   if (exec_inputFd) {
     Close(exec_inputFd);
