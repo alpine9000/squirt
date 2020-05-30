@@ -26,6 +26,55 @@ static const char* errors[] = {
   [ERROR_EXEC_FAILED] = "exec failed",
 };
 
+
+static int
+util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)
+{
+  struct hostent * remote;
+
+  if ((remote = gethostbyname(host)) != NULL) {
+    char **ip_addr;
+    memcpy(&ip_addr, &(remote->h_addr_list[0]), sizeof(void *));
+    memcpy(&addr->sin_addr.s_addr, ip_addr, sizeof(struct in_addr));
+  } else if ((addr->sin_addr.s_addr = inet_addr(host)) == (unsigned long)INADDR_NONE) {
+    return 0;
+  }
+
+  addr->sin_port = htons(port);
+  addr->sin_family = AF_INET;
+
+  return 1;
+}
+
+
+int
+util_connect(const char* hostname, uint32_t commandCode)
+{
+  struct sockaddr_in sockAddr;
+  int socketFd;
+
+  commandCode = htonl(commandCode);
+
+  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
+    return -1;
+  }
+
+  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    return -2;
+  }
+
+  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
+    return -3;
+  }
+
+  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
+    return -4;
+  }
+
+  return socketFd;
+}
+
+
 int
 util_mkdir(const char *path, uint32_t mode)
 {
@@ -43,6 +92,7 @@ util_mkdir(const char *path, uint32_t mode)
 #endif
 }
 
+
 const char*
 util_formatNumber(int number)
 {
@@ -55,6 +105,7 @@ util_formatNumber(int number)
   return buffer;
 }
 
+
 int
 util_open(const char* filename, uint32_t mode)
 {
@@ -64,6 +115,7 @@ util_open(const char* filename, uint32_t mode)
   return open(filename, mode);
 #endif
 }
+
 
 static char*
 util_utf8ToLatin1(const char* buffer)
@@ -76,10 +128,6 @@ util_utf8ToLatin1(const char* buffer)
   char* outptr = out;
   iconv(ic, &inptr, &insize, &outptr, &outsize);
   iconv_close(ic);
-  //#else
-  //  char* out = calloc(1, strlen(buffer));
-  //  strcpy(out, buffer);
-  //#endif
   return out;
 }
 
@@ -87,7 +135,6 @@ util_utf8ToLatin1(const char* buffer)
 static char*
 util_latin1ToUtf8(const char* _buffer)
 {
-  //#ifndef _WIN32
   iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
   char* buffer = malloc(strlen(_buffer)+1);
   strcpy(buffer, _buffer);
@@ -99,10 +146,6 @@ util_latin1ToUtf8(const char* _buffer)
   iconv(ic, &inptr, &insize, &outptr, &outsize);
   iconv_close(ic);
   free(buffer);
-  //#else
-  //  char* out = calloc(1, strlen(_buffer));
-  //  strcpy(out, _buffer);
-  //#endif
   return out;
 }
 
@@ -164,7 +207,6 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
 }
 
 
-
 const char*
 util_amigaBaseName(const char* filename)
 {
@@ -175,6 +217,7 @@ util_amigaBaseName(const char* filename)
   }
   return filename;
 }
+
 
 size_t
 util_recv(int socket, void *buffer, size_t length, int flags)
@@ -194,31 +237,58 @@ util_recv(int socket, void *buffer, size_t length, int flags)
   return total;
 }
 
+
+int
+util_sendU32(int socketFd, uint32_t data)
+{
+  uint32_t networkData = htonl(data);
+
+  if (send(socketFd, (const void*)&networkData, sizeof(networkData), 0) != sizeof(networkData)) {
+    return -1;
+  }
+
+  return 0;
+}
+
+
 int
 util_recvU32(int socketFd, uint32_t *data)
 {
   if (util_recv(socketFd, data, sizeof(uint32_t), 0) != sizeof(uint32_t)) {
-    return 0;
+    return -1;
   }
   *data = ntohl(*data);
-  return 1;
+  return 0;
 }
+
+
+int
+util_recv32(int socketFd, int32_t *data)
+{
+  if (util_recv(socketFd, data, sizeof(int32_t), 0) != sizeof(int32_t)) {
+    return -1;
+  }
+  *data = ntohl(*data);
+  return 0;
+}
+
 
 int
 util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str)
 {
-  int success = 1;
+  int error = 0;
   char* latin1 = util_utf8ToLatin1(str);
   uint32_t length = strlen(latin1);
   uint32_t networkLength = htonl(length);
 
   if (send(socketFd, (const void*)&networkLength, sizeof(networkLength), 0) == sizeof(networkLength)) {
-    success = send(socketFd, latin1, length, 0) == (int)length;
+    error = send(socketFd, latin1, length, 0) != (int)length;
   }
 
   free(latin1);
-  return success;
+  return error;
 }
+
 
 char*
 util_recvLatin1AsUtf8(int socketFd, uint32_t length)
@@ -237,6 +307,7 @@ util_recvLatin1AsUtf8(int socketFd, uint32_t length)
   return utf8;
 }
 
+
 const char*
 util_getErrorString(uint32_t error)
 {
@@ -245,24 +316,4 @@ util_getErrorString(uint32_t error)
   }
 
   return errors[error];
-}
-
-
-int
-util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)
-{
-  struct hostent * remote;
-
-  if ((remote = gethostbyname(host)) != NULL) {
-    char **ip_addr;
-    memcpy(&ip_addr, &(remote->h_addr_list[0]), sizeof(void *));
-    memcpy(&addr->sin_addr.s_addr, ip_addr, sizeof(struct in_addr));
-  } else if ((addr->sin_addr.s_addr = inet_addr(host)) == (unsigned long)INADDR_NONE) {
-    return 0;
-  }
-
-  addr->sin_port = htons(port);
-  addr->sin_family = AF_INET;
-
-  return 1;
 }

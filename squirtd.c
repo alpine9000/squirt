@@ -262,6 +262,8 @@ exec_cd(int fd, const char* dir)
       UnLock(oldLock);
       buffer = 0;
     }
+  } else {
+    UnLock(lock);
   }
 
  cleanup:
@@ -287,8 +289,6 @@ file_get(int fd, const char* destFolder, uint32_t nameLength)
   if (recv(fd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
     return  ERROR_RECV_FAILED;
   }
-
-  fileLength = ntohl(fileLength);
 
   DeleteFile((APTR)squirtd_filename);
 
@@ -418,7 +418,7 @@ main(int argc, char **argv)
   LONG socketTimeout = 1000;
   setsockopt(squirtd_connectionFd, SOL_SOCKET, SO_RCVTIMEO, (char*)&socketTimeout, sizeof(socketTimeout));
 
-  uint8_t command;
+  uint32_t command;
   if (recv(squirtd_connectionFd, (void*)&command, sizeof(command), 0) != sizeof(command)) {
     squirtd_error = ERROR_RECV_FAILED;
     goto cleanup;
@@ -429,8 +429,6 @@ main(int argc, char **argv)
     squirtd_error = ERROR_RECV_FAILED;
     goto cleanup;
   }
-
-  nameLength = ntohl(nameLength);
 
   if (command != SQUIRT_COMMAND_SQUIRT) {
     squirtd_filename = malloc(nameLength+1);

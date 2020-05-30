@@ -20,7 +20,7 @@ squirt_backupDir(const char* hostname, const char* dir);
 static void
 cleanup(void)
 {
-  if (socketFd) {
+  if (socketFd > 0) {
     close(socketFd);
     socketFd = 0;
   }
@@ -183,7 +183,7 @@ getDirEntry(dir_entry_list_t* entryList)
 {
   uint32_t nameLength;
 
-  if (!util_recvU32(socketFd, &nameLength)) {
+  if (util_recvU32(socketFd, &nameLength) != 0) {
     fatalError("failed to read name length");
   }
 
@@ -200,39 +200,38 @@ getDirEntry(dir_entry_list_t* entryList)
   }
 
   int32_t type;
-  if (util_recv(socketFd, &type, sizeof(type), 0) != sizeof(type)) {
+  if (util_recv32(socketFd, &type) != 0) {
     fatalError("failed to read type");
   }
-  type = ntohl(type);
 
   uint32_t size;
-  if (!util_recvU32(socketFd, &size)) {
+  if (util_recvU32(socketFd, &size) != 0) {
     fatalError("failed to read file size");
   }
 
   uint32_t prot;
-  if (!util_recvU32(socketFd, &prot)) {
+  if (util_recvU32(socketFd, &prot) != 0) {
     fatalError("failed to read file prot");
   }
 
   uint32_t days;
-  if (!util_recvU32(socketFd, &days)) {
+  if (util_recvU32(socketFd, &days) != 0) {
     fatalError("failed to read file days");
   }
 
 
   uint32_t mins;
-  if (!util_recvU32(socketFd, &mins)) {
+  if (util_recvU32(socketFd, &mins) != 0) {
     fatalError("failed to read file mins");
   }
 
   uint32_t ticks;
-  if (!util_recvU32(socketFd, &ticks)) {
+  if (util_recvU32(socketFd, &ticks) != 0) {
     fatalError("failed to read file ticks");
   }
 
   uint32_t commentLength;
-  if (!util_recvU32(socketFd, &commentLength)) {
+  if (util_recvU32(socketFd, &commentLength) != 0) {
     fatalError("failed to read comment length");
   }
 
@@ -251,26 +250,11 @@ getDirEntry(dir_entry_list_t* entryList)
 dir_entry_list_t
 squirt_dirRead(const char* hostname, const char* command)
 {
-  struct sockaddr_in sockAddr;
-  uint8_t commandCode = SQUIRT_COMMAND_DIR;
-
-  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed");
+  if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_DIR)) < 0) {
+    fatalError("failed to connect to squirtd server %d", socketFd);
   }
 
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed");
-  }
-
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed");
-  }
-
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed");
-  }
-
-  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
+  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, command) != 0) {
     fatalError("send() command failed");
   }
 
@@ -282,13 +266,11 @@ squirt_dirRead(const char* hostname, const char* command)
 
   uint32_t error;
 
-  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
+  if (util_recvU32(socketFd, &error) != 0) {
     fatalError("failed to read remote status");
   }
 
-  error = ntohl(error);
-
-  if (ntohl(error) != 0) {
+  if (error != 0) {
     fatalError("%s", util_getErrorString(error));
   }
 
@@ -314,26 +296,11 @@ squirt_processDir(const char* hostname, const char* command, void(*process)(cons
 static void
 squirt_cd(const char* hostname, const char* dir)
 {
-  struct sockaddr_in sockAddr;
-  uint8_t commandCode = SQUIRT_COMMAND_CD;
-
-  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed");
+  if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_CD)) < 0) {
+    fatalError("failed to connect to squirtd server");
   }
 
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed");
-  }
-
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed");
-  }
-
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed");
-  }
-
-  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, dir)) {
+  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, dir) != 0) {
     fatalError("send() command failed");
   }
 
@@ -352,13 +319,11 @@ squirt_cd(const char* hostname, const char* dir)
 
   uint32_t error;
 
-  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
+  if (util_recvU32(socketFd, &error) != 0) {
     fatalError("failed to read remote status");
   }
 
-  error = ntohl(error);
-
-  if (ntohl(error) != 0) {
+  if (error != 0) {
     fatalError("%s", util_getErrorString(error));
   }
 

@@ -32,6 +32,9 @@ const char*
 util_formatNumber(int number);
 
 int
+util_connect(const char* hostname, uint32_t commandCode);
+
+int
 util_mkdir(const char *path, uint32_t mode);
 
 int
@@ -43,9 +46,6 @@ util_recvLatin1AsUtf8(int socketFd, uint32_t length);
 int
 util_sendLengthAndUtf8StringAsLatin1(int socketFd, const char* str);
 
-int
-util_getSockAddr(const char * host, int port, struct sockaddr_in * addr);
-
 const char*
 util_getErrorString(uint32_t error);
 
@@ -54,6 +54,12 @@ util_recv(int socket, void *buffer, size_t length, int flags);
 
 int
 util_recvU32(int socketFd, uint32_t *data);
+
+int
+util_recv32(int socketFd, int32_t *data);
+
+int
+util_sendU32(int socketFd, uint32_t data);
 
 const char*
 util_amigaBaseName(const char* filename);

@@ -23,7 +23,7 @@ cleanupAndExit(uint32_t exitCode)
     readBuffer = 0;
   }
 
-  if (socketFd) {
+  if (socketFd > 0) {
     close(socketFd);
     socketFd = 0;
   }
@@ -56,7 +56,7 @@ squirt(int argc, char* argv[])
   int total = 0;
   int32_t fileLength;
   struct stat st;
-  struct sockaddr_in sockAddr;
+
   struct timeval start, end;
   const char* fullPathname;
 
@@ -72,32 +72,17 @@ squirt(int argc, char* argv[])
 
   fileLength = st.st_size;
 
-  if (!util_getSockAddr(argv[1], NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed");
-  }
-
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed");
-  }
-
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed");
-  }
-
-  uint8_t commandCode = SQUIRT_COMMAND_SQUIRT;
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed");
+  if ((socketFd = util_connect(argv[1], SQUIRT_COMMAND_SQUIRT)) < 0) {
+    fatalError("failed to connect to squirtd server");
   }
 
   const char* filename = basename((char*)fullPathname);
 
-  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
+  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, filename) != 0) {
     fatalError("send() name failed");
   }
 
-  int32_t networkFileLength = htonl(fileLength);
-
-  if (send(socketFd, (const void*)&networkFileLength, sizeof(networkFileLength), 0) != sizeof(fileLength)) {
+  if (util_sendU32(socketFd, fileLength) != 0) {
     fatalError("send() fileLength failed");
   }
 
@@ -134,13 +119,11 @@ squirt(int argc, char* argv[])
 
   uint32_t error;
 
-  if (util_recv(socketFd, &error, sizeof(error), 0) != sizeof(error)) {
+  if (util_recvU32(socketFd, &error) != 0) {
     fatalError("failed to read remote status");
   }
 
-  error = ntohl(error);
-
-  if (ntohl(error) == 0) {
+  if (error == 0) {
     gettimeofday(&end, NULL);
     long seconds = end.tv_sec - start.tv_sec;
     long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;

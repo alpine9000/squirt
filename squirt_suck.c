@@ -22,7 +22,7 @@ cleanup(void)
     readBuffer = 0;
   }
 
-  if (socketFd) {
+  if (socketFd > 0) {
     close(socketFd);
     socketFd = 0;
   }
@@ -59,44 +59,28 @@ uint32_t
 squirt_suckFile(const char* hostname, const char* filename)
 {
   uint32_t total = 0;
-  struct sockaddr_in sockAddr;
 
   fflush(stdout);
 
-  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed");
+
+  if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_SUCK)) < 0) {
+    fatalError("failed to connect to squirtd server");
   }
 
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed");
-  }
-
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed");
-  }
-
-  uint8_t commandCode = SQUIRT_COMMAND_SUCK;
-
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed");
-  }
-
-
-  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, filename)) {
+  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, filename) != 0) {
     fatalError("send() filename failed");
   }
 
-  uint32_t networkFileLength;
 
-  if (util_recv(socketFd, &networkFileLength, sizeof(networkFileLength), 0) != sizeof(networkFileLength)) {
+  uint32_t fileLength;
+  if (util_recvU32(socketFd, &fileLength) != 0) {
     fatalError("util_recv() Filelength failed");
   }
 
-  uint32_t fileLength = ntohl(networkFileLength);
   const char* baseName = util_amigaBaseName(filename);
 
   if (fileLength == 0) {
-    //    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
+    fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
   }
 
   fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC, 0777);

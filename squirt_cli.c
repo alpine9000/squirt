@@ -120,7 +120,6 @@ rl_completion(const char *text, int start, int end)
     ei--;
   }
   dirEntryList = squirt_dirRead(squirt_cliHostname, squirt_cliReadLineBase);
-  //  squirt_dirPrintEntryList(squirt_cliHostname, &dirEntryList);
   //  free(path);
   return rl_completion_matches(text, rl_generator);
 }

@@ -13,7 +13,7 @@ static int socketFd = 0;
 static void
 cleanup(void)
 {
-  if (socketFd) {
+  if (socketFd > 0) {
     close(socketFd);
     socketFd = 0;
   }
@@ -45,34 +45,18 @@ const char*
 squirt_cwdRead(const char* hostname)
 {
   static const char* command = "cwd";
-  struct sockaddr_in sockAddr;
-  uint8_t commandCode;
   socketFd = 0;
 
-  commandCode = SQUIRT_COMMAND_CWD;
-
-  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    fatalError("getSockAddr() failed");
+  if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_CWD)) < 0) {
+    fatalError("failed to connect to squirtd server");
   }
 
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    fatalError("socket() failed");
-  }
-
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    fatalError("connect() failed");
-  }
-
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    fatalError("send() commandCode failed");
-  }
-
-  if (!util_sendLengthAndUtf8StringAsLatin1(socketFd, command)) {
+  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, command) != 0) {
     fatalError("send() command failed");
   }
 
   uint32_t nameLength;
-  if (!util_recvU32(socketFd, &nameLength)) {
+  if (util_recvU32(socketFd, &nameLength) != 0) {
     fatalError("failed to get cwd length");
   }
 
