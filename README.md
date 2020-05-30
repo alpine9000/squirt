@@ -76,9 +76,9 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 ![](images/dir.png)
 
 
-# Copyright (c)
+# Copyright &copy;
 
-Unless otherwise specified in the source file, all files are Copyright (c) 2020 Enable Software Pty Ltd
+Unless otherwise specified in the source file, all files are Copyright &copy; 2020 Enable Software Pty Ltd All Rights Reserved.
 
 This software is free software. You can redistribute it and/or modify it under the terms of the GNU Library General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
