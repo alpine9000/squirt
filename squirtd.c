@@ -103,6 +103,7 @@ sendStatus(int fd, uint32_t status)
   send(fd, (void*)&status, sizeof(status), 0);
 }
 
+
 static void
 exec_runner(void)
 {
@@ -112,6 +113,7 @@ exec_runner(void)
     Close(exec_outputFd);
   }
 }
+
 
 static void
 exec_run(int fd, const char* command)

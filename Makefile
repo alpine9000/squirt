@@ -5,7 +5,7 @@ CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli s
 CC=gcc
 VBCC_CC=vc
 AMIGA_GCC_PREFIX=/usr/local/amiga/bebbo
-AMIGA_GCC=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-amigaos/ndk-include/ -flto
+AMIGA_GCC=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-amigaos/ndk-include/
 
 DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined #-fanalyzer
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
