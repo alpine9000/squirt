@@ -121,11 +121,11 @@ squirt(int argc, char* argv[])
       if ((send(socketFd, readBuffer, len, 0)) != len) {
 	fatalError("send() failed");
       }
-      int old = total;
+      //      int old = total;
       total += len;
-      if (((((old*100)/fileLength))/100) - (((total*100)/fileLength)/100) > 2) {
+      //      if (((((old*100)/fileLength))/100) - (((total*100)/fileLength)/100) > 2) {
 	util_printProgress(&start, total, fileLength);
-      }
+	//      }
     }
 
   } while (total < fileLength);

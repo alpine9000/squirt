@@ -251,7 +251,7 @@ getDirEntry(dir_entry_list_t* entryList)
 dir_entry_list_t
 squirt_dirRead(const char* hostname, const char* command)
 {
- struct sockaddr_in sockAddr;
+  struct sockaddr_in sockAddr;
   uint8_t commandCode = SQUIRT_COMMAND_DIR;
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {

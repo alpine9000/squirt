@@ -47,10 +47,8 @@ squirt_cwdRead(const char* hostname)
   static const char* command = "cwd";
   struct sockaddr_in sockAddr;
   uint8_t commandCode;
-  int commandLength = 0;
   socketFd = 0;
 
-  commandLength = strlen(command);
   commandCode = SQUIRT_COMMAND_CWD;
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
