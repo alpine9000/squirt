@@ -45,38 +45,38 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 
 ## Management commands
 
-## squirting a file
+### squirting a file
 
     squirt hostname filename
 
 ![](images/squirt.png)
 
-## sucking a file
+### sucking a file
 
     squirt_suck hostname filename
 
 ![](images/suck.png)
 
-## running a command
+### running a command
 
     squirt_exec hostname command and arguments
 
 ![](images/exec.png)
 
-## backing up
+### backing up
 
     squirt_backup hostname path_to_backup
 
 ![](images/backup.png)
 
-## list directory
+### list directory
 
     squirt_dir hostname path
 
 ![](images/dir.png)
 
 
-# LICENSE
+## License
 
 Unless otherwise specified in the source file, all files are Copyright &copy; 2020 Enable Software Pty Ltd. All Rights Reserved.
 
