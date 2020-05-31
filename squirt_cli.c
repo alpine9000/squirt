@@ -252,7 +252,7 @@ replace_char(char* str, char find, char replace)
 }
 
 static int
-squirt_hostCommand(const char* hostname, int argc, char** argv)
+squirt_hostCommand(const char* hostname, const char* hostCommand, int argc, char** argv)
 {
   (void)argc,(void)argv;
   char filename[PATH_MAX];
@@ -266,7 +266,7 @@ squirt_hostCommand(const char* hostname, int argc, char** argv)
   if (squirt_suckFile(hostname, argv[1], 0, filename) != 0) {
     const char* backup;
     if ((backup = squirt_duplicateFile(filename)) != 0) {
-      snprintf(command, sizeof(command), "emacs -nw %s", filename);
+      snprintf(command, sizeof(command), "%s %s", hostCommand, filename);
       int success = system(command) == 0;
       if (success) {
 	if (squirt_compareFile(filename, backup) == 0) {
@@ -299,7 +299,9 @@ squirt_cliRunCommand(const char* hostname, char* line)
     printf("cd: %s failed\n", argv[1]);
     return 0;
   } else if (argc == 2 && strcmp("emacs", argv[0]) == 0) {
-    return squirt_hostCommand(hostname, argc, argv);
+    return squirt_hostCommand(hostname, "emacs -nw", argc, argv);
+  } else if (argc == 2 && argv[0][0] == '!') {
+    return squirt_hostCommand(hostname, &argv[0][1], argc, argv);
   } else {
     return squirt_execCmd(hostname, argc, argv);
   }
