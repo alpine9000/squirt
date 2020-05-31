@@ -5,10 +5,11 @@
 #include <sys/time.h>
 #include <iconv.h>
 #include <unistd.h>
-#include <pwd.h>
 #include <limits.h>
+#include <signal.h>
 
 #ifndef _WIN32
+#include <pwd.h>
 #include <sys/stat.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -40,9 +41,12 @@ util_getHistoryFile(void)
 const char*
 util_getHomeDir(void)
 {
+#ifndef _WIN32
   struct passwd *pw = getpwuid(getuid());
-
   return  pw->pw_dir;
+#else
+  return getenv("USERPROFILE");
+#endif
 }
 
 static int
@@ -335,3 +339,57 @@ util_getErrorString(uint32_t error)
 
   return errors[error];
 }
+
+static void (*util_onCtrlChandler)(void) = 0;
+
+#ifdef _WIN32
+BOOL WINAPI
+util_consoleHandler(DWORD signal)
+{
+  if (signal == CTRL_C_EVENT) {
+    if (util_onCtrlChandler) {
+      util_onCtrlChandler();
+    }
+  }
+  return TRUE;
+}
+#else
+void
+util_signalHandler(int signal)
+{
+  if (signal == SIGINT) {
+    if (util_onCtrlChandler) {
+      util_onCtrlChandler();
+    }
+  }
+}
+#endif
+
+void
+util_onCtrlC(void (*handler)(void))
+{
+  util_onCtrlChandler = handler;
+#ifdef _WIN32
+  SetConsoleCtrlHandler(util_consoleHandler, TRUE);
+#else
+  signal(SIGINT, util_signalHandler);
+#endif
+}
+
+
+#ifdef _WIN32
+size_t
+strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
+{
+  const size_t srclen = strlen(src);
+  const size_t dstlen = strnlen(dst, maxlen);
+  if (dstlen == maxlen) return maxlen+srclen;
+  if (srclen < maxlen-dstlen) {
+    memcpy(dst+dstlen, src, srclen+1);
+  } else {
+    memcpy(dst+dstlen, src, maxlen-1);
+    dst[dstlen+maxlen-1] = '\0';
+  }
+  return dstlen + srclen;
+}
+#endif

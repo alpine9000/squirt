@@ -430,13 +430,14 @@ squirt_cliRunCommand(const char* hostname, char* line)
 }
 
 
+
 static void
-squirt_writeHistory(int signal)
+squirt_writeHistory(void)
 {
-  (void)signal;
   write_history(util_getHistoryFile());
   cleanupAndExit(EXIT_SUCCESS);
 }
+
 
 int
 squirt_cli(int argc, char* argv[])
@@ -453,7 +454,9 @@ squirt_cli(int argc, char* argv[])
 
   using_history();
   read_history(util_getHistoryFile());
-  signal(SIGINT, squirt_writeHistory);
+
+  util_onCtrlC(squirt_writeHistory);
+
 
   do {
     const char* cwd = squirt_cwdRead(squirt_cliHostname);

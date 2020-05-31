@@ -117,3 +117,11 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
 uint32_t
 squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename);
+
+void
+util_onCtrlC(void (*handler)(void));
+
+#ifdef _WIN32
+size_t
+strlcat(char * restrict dst, const char * restrict src, size_t maxlen);
+#endif
