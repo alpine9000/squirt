@@ -4,6 +4,9 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <iconv.h>
+#include <unistd.h>
+#include <pwd.h>
+#include <limits.h>
 
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -26,6 +29,21 @@ static const char* errors[] = {
   [ERROR_EXEC_FAILED] = "exec failed",
 };
 
+const char*
+util_getHistoryFile(void)
+{
+  static char buffer[PATH_MAX];
+  snprintf(buffer, sizeof(buffer), "%s/.squirt_history", util_getHomeDir());
+  return buffer;
+}
+
+const char*
+util_getHomeDir(void)
+{
+  struct passwd *pw = getpwuid(getuid());
+
+  return  pw->pw_dir;
+}
 
 static int
 util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)

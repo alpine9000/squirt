@@ -274,14 +274,20 @@ exec_cd(int fd, const char* dir)
 
 
 static int16_t
-file_get(int fd, const char* destFolder, uint32_t nameLength)
+file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCwd)
 {
   int destFolderLen = strlen(destFolder);
   int fullPathLen = nameLength+destFolderLen;
   squirtd_filename = malloc(fullPathLen+1);
-  strcpy(squirtd_filename, destFolder);
+  char* filenamePtr;
 
-  if (recv(fd, squirtd_filename+destFolderLen, nameLength, 0) != (int)nameLength) {
+  if (writeToCwd) {
+    filenamePtr = squirtd_filename;
+  }  else {
+    strcpy(squirtd_filename, destFolder);
+    filenamePtr = squirtd_filename+destFolderLen;
+  }
+  if (recv(fd, filenamePtr, nameLength, 0) != (int)nameLength) {
     return ERROR_RECV_FAILED;
   }
 
@@ -432,7 +438,7 @@ main(int argc, char **argv)
     goto cleanup;
   }
 
-  if (command != SQUIRT_COMMAND_SQUIRT) {
+  if (command > SQUIRT_COMMAND_SQUIRT_TO_CWD) {
     squirtd_filename = malloc(nameLength+1);
 
     if (recv(squirtd_connectionFd, squirtd_filename, nameLength, 0) != (int)nameLength) {
@@ -455,7 +461,7 @@ main(int argc, char **argv)
     }
     goto cleanup;
   } else {
-    squirtd_error = file_get(squirtd_connectionFd, argv[1], nameLength);
+    squirtd_error = file_get(squirtd_connectionFd, argv[1], nameLength, command == SQUIRT_COMMAND_SQUIRT_TO_CWD);
     if (squirtd_error) {
       goto cleanup;
     }

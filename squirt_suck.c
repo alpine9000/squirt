@@ -56,12 +56,11 @@ fatalError(const char *format, ...)
 
 
 uint32_t
-squirt_suckFile(const char* hostname, const char* filename)
+squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename)
 {
   uint32_t total = 0;
 
   fflush(stdout);
-
 
   if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_SUCK)) < 0) {
     fatalError("failed to connect to squirtd server");
@@ -77,10 +76,16 @@ squirt_suckFile(const char* hostname, const char* filename)
     fatalError("util_recv() Filelength failed");
   }
 
-  const char* baseName = util_amigaBaseName(filename);
-
   if (fileLength == 0) {
     fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
+  }
+
+  const char* baseName;
+
+  if (!destFilename) {
+    baseName = util_amigaBaseName(filename);
+  } else {
+    baseName = destFilename;
   }
 
   fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC, 0777);
@@ -91,7 +96,9 @@ squirt_suckFile(const char* hostname, const char* filename)
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
+  if (progress) {
+    printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
+  }
 
   fflush(stdout);
 
@@ -109,7 +116,9 @@ squirt_suckFile(const char* hostname, const char* filename)
 	fflush(stdout);
 	fatalError("\n%s failed to read", squirt_argv0);
       } else {
-	util_printProgress(&squirt_suckStart, total, fileLength);
+	if (progress) {
+	  util_printProgress(&squirt_suckStart, total, fileLength);
+	}
 	int readLen;
 	if ((readLen = write(fileFd, readBuffer, len)) != len) {
 	  fflush(stdout);
@@ -120,9 +129,10 @@ squirt_suckFile(const char* hostname, const char* filename)
     } while (total < fileLength);
   }
 
-  util_printProgress(&squirt_suckStart, total, fileLength);
-
-  fflush(stdout);
+  if (progress) {
+    util_printProgress(&squirt_suckStart, total, fileLength);
+    fflush(stdout);
+  }
 
   cleanup();
 
@@ -137,7 +147,7 @@ squirt_suck(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
   }
 
-  uint32_t length = squirt_suckFile(argv[1], argv[2]);
+  uint32_t length = squirt_suckFile(argv[1], argv[2], 1, 0);
 
   struct timeval end;
 

@@ -3,6 +3,9 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -142,6 +145,140 @@ rl_gets(void)
   return (line_read);
 }
 
+static int
+squirt_compareFile(const char* one, const char* two)
+{
+  int identical = 1;
+  int fd1 = open(one, O_RDONLY);
+  int fd2 = open(two, O_RDONLY);
+
+  if (fd1 == -1 || fd2 == -1) {
+    identical = 0;
+    goto cleanup;
+  }
+
+  unsigned char c1, c2;
+  int r1, r2;
+  do {
+    r1 = read(fd1, &c1, sizeof(c1));
+    r2 = read(fd2, &c2, sizeof(c2));
+    if (r1 != r2 || c1 != c2) {
+      identical = 0;
+      goto cleanup;
+    }
+  } while (r1 && r2);
+
+ cleanup:
+
+  if (fd1 >= 0) {
+    close(fd1);
+  }
+
+  if (fd2 >= 0) {
+    close(fd2);
+  }
+
+  return identical;
+}
+
+static const char*
+squirt_duplicateFile(const char* from)
+{
+  static char to[PATH_MAX];
+  snprintf(to, sizeof(to), "%s.orig", from);
+
+  int fd_to, fd_from;
+  char buf[4096];
+  ssize_t nread;
+  int saved_errno;
+
+  fd_from = open(from, O_RDONLY);
+  if (fd_from < 0) {
+    return 0;
+  }
+
+  fd_to = open(to, O_TRUNC | O_WRONLY | O_CREAT , 0666);
+  if (fd_to < 0) {
+    goto out_error;
+  }
+
+  while (nread = read(fd_from, buf, sizeof buf), nread > 0) {
+    char *out_ptr = buf;
+    ssize_t nwritten;
+
+    do {
+      nwritten = write(fd_to, out_ptr, nread);
+
+      if (nwritten >= 0) {
+	nread -= nwritten;
+	out_ptr += nwritten;
+      } else if (errno != EINTR) {
+	goto out_error;
+      }
+    } while (nread > 0);
+  }
+
+  if (nread == 0) {
+    if (close(fd_to) < 0) {
+      fd_to = -1;
+      goto out_error;
+    }
+    close(fd_from);
+
+    /* Success! */
+    return to;
+  }
+
+ out_error:
+  saved_errno = errno;
+
+  close(fd_from);
+  if (fd_to >= 0)
+    close(fd_to);
+
+  errno = saved_errno;
+  return 0;
+}
+
+static char*
+replace_char(char* str, char find, char replace)
+{
+  char *current_pos = strchr(str,find);
+  while (current_pos){
+    *current_pos = replace;
+    current_pos = strchr(current_pos,find);
+  }
+  return str;
+}
+
+static int
+squirt_hostCommand(const char* hostname, int argc, char** argv)
+{
+  (void)argc,(void)argv;
+  char filename[PATH_MAX];
+  char command[PATH_MAX*2];
+  char* local = strdup(argv[1]);
+  replace_char(local, '/', '_');
+  replace_char(local, ':', '_');
+
+  snprintf(filename, sizeof(filename), "/tmp/.squirt/%s", local);
+  util_mkdir("/tmp/.squirt", 0777);
+  if (squirt_suckFile(hostname, argv[1], 0, filename) != 0) {
+    const char* backup;
+    if ((backup = squirt_duplicateFile(filename)) != 0) {
+      snprintf(command, sizeof(command), "emacs -nw %s", filename);
+      int success = system(command) == 0;
+      if (success) {
+	if (squirt_compareFile(filename, backup) == 0) {
+	  success = squirt_file(hostname, filename, argv[1], 1, 0) == 0;
+	}
+      }
+      return success;
+    }
+  }
+
+  return 0;
+}
 
 static int
 squirt_cliRunCommand(const char* hostname, char* line)
@@ -161,11 +298,21 @@ squirt_cliRunCommand(const char* hostname, char* line)
     }
     printf("cd: %s failed\n", argv[1]);
     return 0;
+  } else if (argc == 2 && strcmp("emacs", argv[0]) == 0) {
+    return squirt_hostCommand(hostname, argc, argv);
   } else {
     return squirt_execCmd(hostname, argc, argv);
   }
 }
 
+
+static void
+squirt_writeHistory(int signal)
+{
+  (void)signal;
+  write_history(util_getHistoryFile());
+  cleanupAndExit(EXIT_SUCCESS);
+}
 
 int
 squirt_cli(int argc, char* argv[])
@@ -180,6 +327,9 @@ squirt_cli(int argc, char* argv[])
 
   squirt_cliHostname = argv[1];
 
+  using_history();
+  read_history(util_getHistoryFile());
+  signal(SIGINT, squirt_writeHistory);
 
   do {
     const char* cwd = squirt_cwdRead(squirt_cliHostname);
@@ -187,8 +337,9 @@ squirt_cli(int argc, char* argv[])
       fatalError("failed to get cwd");
     }
     changeDir(cwd);
-    char* command =  rl_gets();
+    char* command = rl_gets();
     if (command && strlen(command)) {
+      add_history(command);
       squirt_cliRunCommand(argv[1], command);
     }
   } while (1);

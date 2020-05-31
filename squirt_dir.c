@@ -602,7 +602,7 @@ backupList(const char* hostname, dir_entry_list_t* list)
       if (skip) {
 	printf("%s \xE2\x9C\x93\n", path);
       } else {
-	squirt_suckFile(hostname, path);
+	squirt_suckFile(hostname, path, 1, 0);
 	saveExAllData(entry, path);
 	printf("\n");
 	fflush(stdout);

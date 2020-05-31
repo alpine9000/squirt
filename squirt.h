@@ -34,6 +34,12 @@ util_formatNumber(int number);
 int
 util_connect(const char* hostname, uint32_t commandCode);
 
+const char*
+util_getHomeDir(void);
+
+const char*
+util_getHistoryFile(void);
+
 int
 util_mkdir(const char *path, uint32_t mode);
 
@@ -106,5 +112,8 @@ squirt_suck(int argc, char* argv[]);
 int
 squirt(int argc, char* argv[]);
 
+int
+squirt_file(const char* hostname, const char* filename, const char* destFilename, int writeToCurrentDir, int progress);
+
 uint32_t
-squirt_suckFile(const char* hostname, const char* filename);
+squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename);
