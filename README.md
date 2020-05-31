@@ -9,7 +9,7 @@ You can:
  * List directories
  * Perform incremental backups
  * Run a remote cli
-    * You can run commands remote on your Amiga
+    * You can run (non interactive) commands remotely on your Amiga
     * You can run commands locally on your modern system
     * When you run commands locally they can easily access both Amiga and local files
 
