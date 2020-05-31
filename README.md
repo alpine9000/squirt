@@ -9,9 +9,11 @@ You can:
  * List directories
  * Perform incremental backups
  * Run a remote cli
-    * You can run (non interactive) commands remotely on your Amiga
-    * You can run commands locally on your modern system
-    * When you run commands locally they can easily access both Amiga and local files
+     * Filename completion on remote Amiga files
+     * Line editing and command history (similar to bash etc)
+     * Run (non interactive) commands remotely on your Amiga
+     * Run commands locally on your modern system
+     * Local commands can easily access both Amiga and local files (even mixed in the same command)
 
 :radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
 
