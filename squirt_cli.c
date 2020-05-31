@@ -152,7 +152,10 @@ squirt_compareFile(const char* one, const char* two)
   int fd1 = open(one, O_RDONLY);
   int fd2 = open(two, O_RDONLY);
 
-  if (fd1 == -1 || fd2 == -1) {
+  if (fd1 == -1 && fd2 == -1) {
+    identical = 1;
+    goto cleanup;
+  } else if (fd1 == -1 || fd2 == -1) {
     identical = 0;
     goto cleanup;
   }
@@ -181,11 +184,12 @@ squirt_compareFile(const char* one, const char* two)
   return identical;
 }
 
-static const char*
+static char*
 squirt_duplicateFile(const char* from)
 {
-  static char to[PATH_MAX];
-  snprintf(to, sizeof(to), "%s.orig", from);
+  int toLength = strlen(from) + strlen(".orig") + 1;
+  char *to = malloc(toLength);
+  snprintf(to, toLength, "%s.orig", from);
 
   int fd_to, fd_from;
   char buf[4096];
@@ -194,10 +198,11 @@ squirt_duplicateFile(const char* from)
 
   fd_from = open(from, O_RDONLY);
   if (fd_from < 0) {
+    free(to);
     return 0;
   }
 
-  fd_to = open(to, O_TRUNC | O_WRONLY | O_CREAT , 0666);
+  fd_to = open(to, O_TRUNC|O_WRONLY|O_CREAT , 0666);
   if (fd_to < 0) {
     goto out_error;
   }
@@ -232,6 +237,10 @@ squirt_duplicateFile(const char* from)
  out_error:
   saved_errno = errno;
 
+  if (to) {
+    free(to);
+  }
+
   close(fd_from);
   if (fd_to >= 0)
     close(fd_to);
@@ -251,33 +260,148 @@ replace_char(char* str, char find, char replace)
   return str;
 }
 
-static int
-squirt_hostCommand(const char* hostname, const char* hostCommand, int argc, char** argv)
+
+typedef struct hostfile {
+  char* localFilename;
+  char* backupFilename;
+  char** argv;
+  char* remoteFilename;
+  struct hostfile* next;
+} squirt_hostfile_t;
+
+
+static void
+squirt_freeHostFile(squirt_hostfile_t* file)
 {
-  (void)argc,(void)argv;
-  char filename[PATH_MAX];
-  char command[PATH_MAX*2];
-  char* local = strdup(argv[1]);
+  if (file) {
+    if (file->localFilename) {
+      free(file->localFilename);
+    }
+    if (file->backupFilename) {
+      free(file->backupFilename);
+    }
+    free(file);
+  }
+}
+
+static squirt_hostfile_t*
+squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const char* remote)
+{
+  squirt_hostfile_t *file = calloc(1, sizeof(squirt_hostfile_t));
+  char* local = strdup(remote);
   replace_char(local, '/', '_');
   replace_char(local, ':', '_');
 
-  snprintf(filename, sizeof(filename), "/tmp/.squirt/%s", local);
+  int localFilenameLength = strlen(remote) + strlen("/tmp/.squirt.") + 1;
+  file->remoteFilename = (char*)remote;
+  file->localFilename = malloc(localFilenameLength);
+  snprintf(file->localFilename, localFilenameLength, "/tmp/.squirt/%s", local);
   util_mkdir("/tmp/.squirt", 0777);
-  if (squirt_suckFile(hostname, argv[1], 0, filename) != 0) {
-    const char* backup;
-    if ((backup = squirt_duplicateFile(filename)) != 0) {
-      snprintf(command, sizeof(command), "%s %s", hostCommand, filename);
-      int success = system(command) == 0;
-      if (success) {
-	if (squirt_compareFile(filename, backup) == 0) {
-	  success = squirt_file(hostname, filename, argv[1], 1, 0) == 0;
+
+#if 0
+  if (squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename) == 0) {
+    goto error;
+  } else {
+
+    if ((file->backupFilename = squirt_duplicateFile(file->localFilename)) != 0) {
+      if (*list) {
+	squirt_hostfile_t* ptr = *list;
+	while (ptr->next) {
+	  ptr = ptr->next;
 	}
+	ptr->next = file;
+      } else {
+	*list = file;
       }
-      return success;
+      return file;
+    }
+  }
+ error:
+  fprintf(stderr, "failed to convert %s to local file\n", remote);
+  squirt_freeHostFile(file);
+  return 0;
+#else
+  if (!squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename)) {
+    unlink(file->localFilename);
+  }
+  file->backupFilename = squirt_duplicateFile(file->localFilename);
+  if (*list) {
+    squirt_hostfile_t* ptr = *list;
+    while (ptr->next) {
+      ptr = ptr->next;
+    }
+    ptr->next = file;
+  } else {
+    *list = file;
+  }
+
+  return file;
+
+#endif
+
+}
+
+
+static int
+squirt_saveFileIfModified(const char* hostname, squirt_hostfile_t* file)
+{
+  int success = 0;
+  if (squirt_compareFile(file->localFilename, file->backupFilename) == 0) {
+    success = squirt_file(hostname, file->localFilename, file->remoteFilename, 1, 0) == 0;
+  }
+
+  return success;
+}
+
+static int
+squirt_hostCommand(const char* hostname, int argc, char** argv)
+{
+  int success = 0;
+  (void)argc,(void)argv;
+
+  char command[PATH_MAX*2];
+  squirt_hostfile_t* list = 0;
+
+  for (int i = 1; i < argc; i++) {
+    if (argv[i][0] != '!' && argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
+      squirt_hostfile_t* hostFile = squirt_convertFileToHost(hostname, &list, argv[i]);
+      if (hostFile) {
+	hostFile->argv = &argv[i];
+	argv[i] = hostFile->localFilename;
+      } else {
+	goto error;
+      }
     }
   }
 
-  return 0;
+
+  command[0] = 0;
+  for (int i = 0; i < argc; i++) {
+    if (i != 0) {
+      strlcat(command, " ", sizeof(command));
+    }
+    if (argv[i][0] == '!') {
+      strlcat(command, &argv[i][1], sizeof(command));
+    } else {
+      strlcat(command, argv[i], sizeof(command));
+    }
+  }
+
+  success = system(command) == 0;
+
+ error:
+  {
+    squirt_hostfile_t* file = list;
+    while (file) {
+      squirt_saveFileIfModified(hostname, file);
+      squirt_hostfile_t* save = file;
+      file = file->next;
+      *save->argv = save->remoteFilename;
+      squirt_freeHostFile(save);
+    }
+  }
+
+  return success;
 }
 
 static int
@@ -298,10 +422,8 @@ squirt_cliRunCommand(const char* hostname, char* line)
     }
     printf("cd: %s failed\n", argv[1]);
     return 0;
-  } else if (argc == 2 && strcmp("emacs", argv[0]) == 0) {
-    return squirt_hostCommand(hostname, "emacs -nw", argc, argv);
-  } else if (argc == 2 && argv[0][0] == '!') {
-    return squirt_hostCommand(hostname, &argv[0][1], argc, argv);
+  } else if (argv[0][0] == '!') {
+    return squirt_hostCommand(hostname, argc, argv);
   } else {
     return squirt_execCmd(hostname, argc, argv);
   }

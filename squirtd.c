@@ -283,10 +283,12 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
 
   if (writeToCwd) {
     filenamePtr = squirtd_filename;
+    fullPathLen = nameLength;
   }  else {
     strcpy(squirtd_filename, destFolder);
     filenamePtr = squirtd_filename+destFolderLen;
   }
+
   if (recv(fd, filenamePtr, nameLength, 0) != (int)nameLength) {
     return ERROR_RECV_FAILED;
   }
@@ -321,7 +323,7 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
     }
   } while (timeout < 2 && total < fileLength);
 
-  printf("got %s -> %d\n", filename, total);
+  printf("got %s -> %d\n", squirtd_filename, total);
 
   return 0;
 }
