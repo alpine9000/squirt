@@ -8,6 +8,10 @@ You can:
  * Run non interactive commands
  * List directories
  * Perform incremental backups
+ * Run a remote cli
+    * You can run commands remote on your Amiga
+    * You can run commands locally on your modern system
+    * When you run commands locally they can easily access both Amiga and local files
 
 :radioactive::warning::no_entry: Please don't run `squirtd` on any computer that is connected to the open internet!!! :no_entry::warning::radioactive:
 
@@ -62,6 +66,12 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
     squirt_exec hostname command and arguments
 
 ![](images/exec.png)
+
+### remote cli
+    squirt_cli hostname
+    
+Click on the image below to see a demo video of the remote shell in action.
+[![squirt_cli demo video](https://img.youtube.com/vi/n2cS01OXowc/0.jpg)](https://www.youtube.com/watch?v=n2cS01OXowc)
 
 ### backing up
 
