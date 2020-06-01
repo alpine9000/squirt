@@ -55,10 +55,10 @@ fatalError(const char *format, ...)
 }
 
 
-uint32_t
+int32_t
 squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename)
 {
-  uint32_t total = 0;
+  int32_t total = 0;
 
   fflush(stdout);
 
@@ -71,17 +71,9 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
   }
 
 
-  uint32_t fileLength;
-  if (util_recvU32(socketFd, &fileLength) != 0) {
+  int32_t fileLength;
+  if (util_recv32(socketFd, &fileLength) != 0) {
     fatalError("util_recv() Filelength failed");
-  }
-
-  if (fileLength == 0) {
-    if (progress) {
-      fatalError("%s: failed to suck file %s\n", squirt_argv0, filename);
-    } else {
-      return 0;
-    }
   }
 
   const char* baseName;
@@ -108,7 +100,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
   gettimeofday(&squirt_suckStart, NULL);
 
-  if (fileLength) {
+  if (fileLength > 0) {
     do {
       int len, requestLength;
       if (fileLength - total > BLOCK_SIZE) {
@@ -131,6 +123,8 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 	total += len;
       }
     } while (total < fileLength);
+  } else {
+    total = fileLength;
   }
 
   if (progress) {
@@ -138,6 +132,18 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     fflush(stdout);
   }
 
+  uint32_t error;
+  if (util_recvU32(socketFd, &error) != 0) {
+    fatalError("suck: failed to read remote status");
+  }
+
+  if (error) {
+    total = -error;
+    if (progress) {
+      fatalError("failed to suck file %s\n", squirt_argv0, filename);
+    }    
+  }
+  
   cleanup();
 
   return total;
@@ -151,7 +157,7 @@ squirt_suck(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
   }
 
-  uint32_t length = squirt_suckFile(argv[1], argv[2], 1, 0);
+  int32_t length = squirt_suckFile(argv[1], argv[2], 1, 0);
 
   struct timeval end;
 

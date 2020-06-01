@@ -123,7 +123,7 @@ squirt_execCmd(const char* hostname, int argc, char** argv)
   uint32_t error;
 
   if (util_recvU32(socketFd, &error) != 0) {
-    fatalError("failed to read remote status");
+    fatalError("exec: failed to read remote status");
   }
 
   cleanup();

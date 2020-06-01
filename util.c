@@ -157,18 +157,25 @@ util_utf8ToLatin1(const char* buffer)
 static char*
 util_latin1ToUtf8(const char* _buffer)
 {
-  iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
-  char* buffer = malloc(strlen(_buffer)+1);
-  strcpy(buffer, _buffer);
-  size_t insize = strlen(buffer);
-  char* inptr = (char*)buffer;
-  size_t outsize = (insize*4)+1;
-  char* out = calloc(1, outsize);
-  char* outptr = out;
-  iconv(ic, &inptr, &insize, &outptr, &outsize);
-  iconv_close(ic);
-  free(buffer);
-  return out;
+  if (_buffer) {
+    iconv_t ic = iconv_open("UTF-8", "ISO-8859-1");
+    char* buffer = malloc(strlen(_buffer)+1);
+    if (!buffer) {
+      return NULL;
+    }
+    strcpy(buffer, _buffer);
+    size_t insize = strlen(buffer);
+    char* inptr = (char*)buffer;
+    size_t outsize = (insize*4)+1;
+    char* out = calloc(1, outsize);
+    char* outptr = out;
+    iconv(ic, &inptr, &insize, &outptr, &outsize);
+    iconv_close(ic);
+    free(buffer);
+    return out;
+  }
+
+  return NULL;
 }
 
 
@@ -377,9 +384,8 @@ util_onCtrlC(void (*handler)(void))
 }
 
 
-#ifdef _WIN32
 size_t
-strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
+util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
 {
   const size_t srclen = strlen(src);
   const size_t dstlen = strnlen(dst, maxlen);
@@ -392,4 +398,3 @@ strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
   }
   return dstlen + srclen;
 }
-#endif

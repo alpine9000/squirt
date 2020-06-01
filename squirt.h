@@ -20,9 +20,11 @@ typedef struct direntry {
   int renderedSizeLength;
 } dir_entry_t;
 
-typedef struct {
+typedef struct dir_entry_list {
   dir_entry_t* head;
   dir_entry_t* tail;
+  struct dir_entry_list *next;
+  struct dir_entry_list *prev;
 } dir_entry_list_t;
 
 extern const char* squirt_argv0;
@@ -88,8 +90,11 @@ squirt_cli(int argc, char* argv[]);
 int
 squirt_dir(int argc, char* argv[]);
 
-dir_entry_list_t
+dir_entry_list_t*
 squirt_dirRead(const char* hostname, const char* command);
+
+void
+squirt_dirFreeEntryLists(void);
 
 void
 squirt_dirFreeEntryList(dir_entry_list_t* list);
@@ -115,13 +120,11 @@ squirt(int argc, char* argv[]);
 int
 squirt_file(const char* hostname, const char* filename, const char* destFilename, int writeToCurrentDir, int progress);
 
-uint32_t
+int32_t
 squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename);
 
 void
 util_onCtrlC(void (*handler)(void));
 
-#ifdef _WIN32
 size_t
-strlcat(char * restrict dst, const char * restrict src, size_t maxlen);
-#endif
+util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen);

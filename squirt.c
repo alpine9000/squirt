@@ -131,7 +131,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
   uint32_t error;
 
   if (util_recvU32(socketFd, &error) != 0) {
-    fatalError("failed to read remote status");
+    fatalError("squirt: failed to read remote status");
   }
 
   if (error == 0) {

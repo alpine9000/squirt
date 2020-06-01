@@ -1,3 +1,8 @@
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+ICONV_LIB=-liconv
+endif
+
 SQUIRTD_SRCS=squirtd.c
 SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c squirt_cli.c squirt_cwd.c util.c argv.c
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd
@@ -14,7 +19,7 @@ CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
 AMIGA_GCC_CFLAGS=-fwhole-program -Os -fomit-frame-pointer -noixemul $(WARNINGS)
 VBCC_CFLAGS=-O1 +aos68k -c99
 
-LIBS=-liconv -lreadline
+LIBS=$(ICONV_LIB) -lreadline
 
 SQUIRTD_AMIGA_OBJS=$(addprefix build/obj/amiga/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRTD_AMIGA_GCC_OBJS= $(addprefix build/obj/amiga.gcc/, $(SQUIRTD_SRCS:.c=.o))
@@ -25,6 +30,8 @@ HOST_CLIENT_APPS=$(addprefix build/, $(CLIENT_APPS))
 SERVER_APPS=build/amiga/squirtd build/amiga/squirtd.vbcc
 
 all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
+
+client: $(HOST_CLIENT_APPS) 
 
 build/squirt: $(SQUIRT_OBJS)
 	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt $(LIBS)
