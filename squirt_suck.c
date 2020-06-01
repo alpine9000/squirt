@@ -141,7 +141,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
   if (error) {
     total = -error;
     if (progress) {
-      fatalError("failed to suck file %s\n", squirt_argv0, filename);
+      fatalError("failed to suck file %s", filename);
     }
   }
 

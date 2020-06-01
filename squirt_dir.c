@@ -268,7 +268,6 @@ getDirEntry(dir_entry_list_t* entryList)
   char* buffer = util_recvLatin1AsUtf8(socketFd, nameLength);
 
   if (!buffer) {
-    //    fatalError("failed to read name (%d bytes)", nameLength);
     fprintf(stderr, "failed to read name\n");
     return 0;
   }
@@ -686,7 +685,7 @@ backupList(const char* hostname, dir_entry_list_t* list)
 	}
       } else {
 	if (squirt_suckFile(hostname, path, 1, 0) < 0) {
-	  fatalError("failed to backup %s\n", path);
+	  fatalError("failed to backup %s", path);
 	}
 	saveExAllData(entry, path);
 	printf("\n");
@@ -768,10 +767,10 @@ squirt_loadSkipFile(const char* filename)
   if (fd) {
     if (read(fd, squirt_skipFile, fileLength) != fileLength) {
       close(fd);
-      fatalError("failed to read skipfile %s\n", filename);
+      fatalError("failed to read skipfile %s", filename);
     }
   } else {
-    fatalError("failed to open skipfile %s\n", filename);
+    fatalError("failed to open skipfile %s", filename);
   }
 
   close(fd);

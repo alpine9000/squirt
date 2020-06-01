@@ -352,6 +352,11 @@ file_send(int fd, char* filename)
 
   fileSize = fileInfo.fib_Size;
 
+  if (fileInfo.fib_DirEntryType > 0) {
+    fileSize = -1;
+    squirtd_error = ERROR_SUCK_ON_DIR;
+  }
+
   if (send(fd, (void*)&fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
     return ERROR_SEND_FAILED;
   }

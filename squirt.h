@@ -132,3 +132,6 @@ util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen);
 
 const char*
 util_getTempFolder(void);
+
+int
+util_isDirectory(const char *path);

@@ -20,6 +20,7 @@ typedef enum {
   ERROR_CD_FAILED,
   ERROR_FAILED_TO_CREATE_OS_RESOURCE,
   ERROR_EXEC_FAILED,
+  ERROR_SUCK_ON_DIR,
 } _error_t;
 
 static const int BLOCK_SIZE = 8192;

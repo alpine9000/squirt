@@ -7,10 +7,10 @@
 #include <unistd.h>
 #include <limits.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #ifndef _WIN32
 #include <pwd.h>
-#include <sys/stat.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #endif
@@ -28,6 +28,7 @@ static const char* errors[] = {
   [ERROR_CD_FAILED] = "cd failed",
   [ERROR_FAILED_TO_CREATE_OS_RESOURCE] = "failed to create os resource",
   [ERROR_EXEC_FAILED] = "exec failed",
+  [ERROR_SUCK_ON_DIR] = "suck on dir",
 };
 
 const char*
@@ -411,4 +412,22 @@ util_getTempFolder(void)
   snprintf(path, sizeof(path), "%s.squirt/", buffer);
   return path;
 #endif
+}
+
+
+int
+util_isDirectory(const char *path)
+{
+#ifdef _WIN32
+  struct _stat statbuf;
+  if (_stat(path, &statbuf) != 0)
+    return 0;
+  return statbuf.st_mode & _S_IFDIR;
+#else
+  struct stat statbuf;
+  if (stat(path, &statbuf) != 0)
+    return 0;
+  return S_ISDIR(statbuf.st_mode);
+#endif
+
 }

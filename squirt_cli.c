@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -83,7 +84,6 @@ prompt(void)
   return buffer;
 }
 
-
 static char *
 rl_generator(const char *text, int state)
 {
@@ -92,6 +92,23 @@ rl_generator(const char *text, int state)
   if (!state) {
     list_index = 0;
     len = strlen(text);
+  }
+
+  if (text && text[0] == '!') {
+    char* real = rl_filename_completion_function(&text[1], state);
+    if (real) {
+      if (util_isDirectory(real)) {
+	rl_completion_append_character = '/';
+      } else {
+	rl_completion_append_character = ' ';
+      }
+      char* fake = malloc(strlen(real)+2);
+      sprintf(fake, "!%s", real);
+      free(real);
+      return fake;
+    } else {
+      return 0;
+    }
   }
 
   dir_entry_t* ptr;
@@ -112,6 +129,7 @@ rl_generator(const char *text, int state)
 
     char buffer[256];
     snprintf(buffer, 256, "%s%s", squirt_cliReadLineBase, entry->name);
+
     if (strncmp(buffer, text, len) == 0) {
       rl_completion_append_character = entry->type > 0 ? '/' : ' ';
       return strdup(buffer);
@@ -126,11 +144,13 @@ static char **
 rl_completion(const char *text, int start, int end)
 {
   (void)start,(void)end;
-  //  rl_attempted_completion_over = 1;
+
   if (squirt_cliReadLineBase) {
     free(squirt_cliReadLineBase);
   }
+
   squirt_cliReadLineBase = strdup(text);
+
   int ei = strlen(squirt_cliReadLineBase);
   while (ei >= 0 && squirt_cliReadLineBase[ei] != '/' && squirt_cliReadLineBase[ei] != ':') {
     squirt_cliReadLineBase[ei] = 0;
@@ -328,18 +348,25 @@ squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const c
   free(local);
   util_mkdir(tempPath, 0777);
 
-  if (squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename) < 0) {
-    unlink(file->localFilename);
-  }
-  file->backupFilename = squirt_duplicateFile(file->localFilename);
-  if (*list) {
-    squirt_hostfile_t* ptr = *list;
-    while (ptr->next) {
-      ptr = ptr->next;
-    }
-    ptr->next = file;
+  int error = squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename);
+  if (error == -ERROR_SUCK_ON_DIR) {
+    fprintf(stderr, "error: failed to access remote directory %s\n", file->remoteFilename);
+    free(file);
+    return 0;
   } else {
-    *list = file;
+    if (error < 0) {
+      unlink(file->localFilename);
+    }
+    file->backupFilename = squirt_duplicateFile(file->localFilename);
+    if (*list) {
+      squirt_hostfile_t* ptr = *list;
+      while (ptr->next) {
+	ptr = ptr->next;
+      }
+      ptr->next = file;
+    } else {
+      *list = file;
+    }
   }
 
   return file;
@@ -367,7 +394,7 @@ squirt_hostCommand(const char* hostname, int argc, char** argv)
   squirt_hostfile_t* list = 0;
 
   for (int i = 1; i < argc; i++) {
-    if (argv[i][0] != '!' && argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
+    if (argv[i][0] != '~' && argv[i][0] != '!' && argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
       squirt_hostfile_t* hostFile = squirt_convertFileToHost(hostname, &list, argv[i]);
       if (hostFile) {
 	hostFile->argv = &argv[i];
