@@ -701,9 +701,23 @@ backupList(const char* hostname, dir_entry_list_t* list)
   while (entry) {
     if (entry->type > 0) {
       const char* path = fullPath(entry->name);
-      saveExAllData(entry, path);
-      free((void*)path);
-      squirt_backupDir(hostname, entry->name);
+      int skipFile = 0;
+      if (squirt_skipFile) {
+	char* found = strstr(squirt_skipFile, path);
+	if (found) {
+	  found += strlen(path);
+	  skipFile = *found == 0 || *found == '\n' || *found == '\r';
+	}
+      }
+      if (!skipFile) {
+	saveExAllData(entry, path);
+	free((void*)path);
+	squirt_backupDir(hostname, entry->name);
+      } else {
+	printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
+	free((void*)path);
+      }
+
     }
     entry = entry->next;
   }
