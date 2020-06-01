@@ -92,7 +92,7 @@ For commands that are run locally, any filenames you specify will be transferred
   
 If the command modifies the file, it will be saved back to the Amiga once the command exits.
 
-You can mix local and remote files with local commands. You indicate a file as local by prefixing it with an `!`. Also any file that starts with a `~` will also be treated as a local file.
+You can mix local and remote files with local commands. You indicate a file as local by prefixing it with an `!`. Also any file that starts with a `~` will also be treated as a local file. Arguments starting with `-` are passed directly to local commands. If arguments to local commands do not start with `-` they must be escaped with `!` to indicate that are not remote files.
 
     1.WB3.1:> !cp S:Startup-Sequence ~/Startup-Sequence.backup
     1.WB3.1:> !echo !"\\;A new line" >> S:Startup-Sequence
@@ -110,8 +110,6 @@ You can mix local and remote files with local commands. You indicate a file as l
     < ;A new line
     1.WB3.1:> 
     
-   
-
 Click on the image below to see a demo video of the remote shell in action.
 [![squirt_cli demo video](https://img.youtube.com/vi/n2cS01OXowc/0.jpg)](https://www.youtube.com/watch?v=n2cS01OXowc)
 
