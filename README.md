@@ -72,12 +72,54 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
 ### remote cli
     squirt_cli hostname
     
+By default any command you type will be executed on the remote Amiga:
+    
+    1.WB3.1>dir
+    DblPAL                           DblPAL.info
+    Multiscan                        Multiscan.info
+    PAL                              PAL.info
+    Super72                          Super72.info
+    VGAOnly                          VGAOnly.info
+    
+If you prefix the command with ! the command will be executed on the host (local) computer
+    
+    1.WB3.1:> !uname
+    Darwin
+
+For commands that are run locally, any filenames you specify will be transferred to the local machine so that the local command can access them.
+
+    1.WB3.1:> !emacs S:Startup-Sequence 
+  
+If the command modifies the file, it will be saved back to the Amiga once the command exits.
+
+You can mix local and remote files with local commands, currently remote filenames are any files that either start with "~" or are prefixed with "!" to force a local file.
+
+    1.WB3.1:> !cp S:Startup-Sequence ~/Startup-Sequence.backup
+    1.WB3.1:> !echo !"\\;A new line" >> S:Startup-Sequence
+    1.WB3.1:> type S:Startup-Sequence
+    ...
+    ...
+    Resident Execute REMOVE
+    Resident Assign REMOVE
+
+    C:LoadWB
+    EndCLI >NIL:
+    ;A new line
+    1.WB3.1:> !diff S:Startup-Sequence ~/Startup-Sequence.backup 
+    67d66
+    < ;A new line
+    1.WB3.1:> 
+    
+   
+
 Click on the image below to see a demo video of the remote shell in action.
 [![squirt_cli demo video](https://img.youtube.com/vi/n2cS01OXowc/0.jpg)](https://www.youtube.com/watch?v=n2cS01OXowc)
 
 ### backing up
 
-    squirt_backup hostname path_to_backup
+    squirt_backup [--skipfile=skip_filename] hostname path_to_backup
+ 
+`skip_filename` is an optional file which includes a list of files or directories that should not be backed up.
 
 ![](images/backup.png)
 
