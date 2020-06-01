@@ -77,7 +77,9 @@ Click on the image below to see a demo video of the remote shell in action.
 
 ### backing up
 
-    squirt_backup hostname path_to_backup
+    squirt_backup [--skipfiles=filename] hostname path_to_backup
+ 
+ The skip file is an optional file which includes a list of files or directories that should not be backed up.
 
 ![](images/backup.png)
 
