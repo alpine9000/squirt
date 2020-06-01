@@ -74,14 +74,14 @@ where `Work:Incoming/` is the destination folder you want `squirtd` to write fil
     
 By default any command you type will be executed on the remote Amiga:
     
-    1.WB3.1>dir
+    1.WB3.1>dir DEVS:Monitors
     DblPAL                           DblPAL.info
     Multiscan                        Multiscan.info
     PAL                              PAL.info
     Super72                          Super72.info
     VGAOnly                          VGAOnly.info
     
-If you prefix the command with ! the command will be executed on the host (local) computer
+If you prefix the command with `!` the command will be executed on the host (local) computer
     
     1.WB3.1:> !uname
     Darwin
@@ -92,7 +92,7 @@ For commands that are run locally, any filenames you specify will be transferred
   
 If the command modifies the file, it will be saved back to the Amiga once the command exits.
 
-You can mix local and remote files with local commands, currently remote filenames are any files that either start with "~" or are prefixed with "!" to force a local file.
+You can mix local and remote files with local commands. You indicate a file as local by prefixing it with an `!`. Also any file that starts with a `~` will also be treated as a local file.
 
     1.WB3.1:> !cp S:Startup-Sequence ~/Startup-Sequence.backup
     1.WB3.1:> !echo !"\\;A new line" >> S:Startup-Sequence
