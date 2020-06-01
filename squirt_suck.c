@@ -92,15 +92,15 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
   readBuffer = malloc(BLOCK_SIZE);
 
-  if (progress) {
-    printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
-  }
-
-  fflush(stdout);
-
-  gettimeofday(&squirt_suckStart, NULL);
-
   if (fileLength > 0) {
+    if (progress) {
+      printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
+    }
+
+    fflush(stdout);
+
+    gettimeofday(&squirt_suckStart, NULL);
+
     do {
       int len, requestLength;
       if (fileLength - total > BLOCK_SIZE) {
@@ -123,14 +123,15 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 	total += len;
       }
     } while (total < fileLength);
+
+    if (progress) {
+      util_printProgress(&squirt_suckStart, total, fileLength);
+      fflush(stdout);
+    }
   } else {
     total = fileLength;
   }
 
-  if (progress) {
-    util_printProgress(&squirt_suckStart, total, fileLength);
-    fflush(stdout);
-  }
 
   uint32_t error;
   if (util_recvU32(socketFd, &error) != 0) {
@@ -141,9 +142,9 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     total = -error;
     if (progress) {
       fatalError("failed to suck file %s\n", squirt_argv0, filename);
-    }    
+    }
   }
-  
+
   cleanup();
 
   return total;

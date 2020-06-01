@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
@@ -11,6 +12,7 @@
 #include "common.h"
 
 static dir_entry_list_t* squirt_dirEntryLists = 0;
+static char* squirt_skipFile = 0;
 
 dir_entry_list_t*
 squirt_newEntryList(void)
@@ -51,7 +53,7 @@ cleanup(void)
   if (dirBuffer) {
     free(dirBuffer);
     dirBuffer = 0;
-  }  
+  }
 }
 
 
@@ -59,7 +61,11 @@ static void
 cleanupAndExit(int errorCode)
 {
   cleanup();
-  squirt_dirFreeEntryLists();  
+  squirt_dirFreeEntryLists();
+  if (squirt_skipFile) {
+    free(squirt_skipFile);
+    squirt_skipFile = 0;
+  }
   exit(errorCode);
 }
 
@@ -137,7 +143,7 @@ squirt_dirFreeEntryLists(void)
     }
 
     ptr = ptr->next;
-    free(save);    
+    free(save);
   }
   squirt_dirEntryLists = 0;
 }
@@ -149,11 +155,11 @@ squirt_dirFreeEntryList(dir_entry_list_t* list)
   while (ptr) {
     if (ptr == list) {
       if (ptr->prev != NULL) {
-	ptr->prev->next = ptr->next;	
-      } else { 
+	ptr->prev->next = ptr->next;
+      } else {
 	squirt_dirEntryLists = ptr->next;
       }
-      
+
       if (ptr->next != NULL) {
 	ptr->next->prev = ptr->prev;
       }
@@ -161,7 +167,7 @@ squirt_dirFreeEntryList(dir_entry_list_t* list)
     }
     ptr = ptr->next;
   }
-  
+
   dir_entry_t* entry = list->head;
 
   while (entry) {
@@ -655,7 +661,15 @@ backupList(const char* hostname, dir_entry_list_t* list)
   while (entry) {
     if (entry->type < 0) {
       const char* path = fullPath(entry->name);
-      int skip = 0;
+      int skipFile = 0;
+      if (squirt_skipFile) {
+	char* found = strstr(squirt_skipFile, path);
+	if (found) {
+	  found += strlen(path);
+	  skipFile = *found == 0 || *found == '\n' || *found == '\r';
+	}
+      }
+      int skip = skipFile;
       {
 	dir_entry_t *temp = newDirEntry();
 	struct stat st;
@@ -671,7 +685,11 @@ backupList(const char* hostname, dir_entry_list_t* list)
       }
 
       if (skip) {
-	printf("%s \xE2\x9C\x93\n", path);
+	if (skipFile) {
+	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
+	} else {
+	  printf("%s \xE2\x9C\x93\n", path);
+	}
       } else {
 	if (squirt_suckFile(hostname, path, 1, 0) < 0) {
 	  fatalError("failed to backup %s\n", path);
@@ -724,18 +742,53 @@ squirt_dir(int argc, char* argv[])
   return 0;
 }
 
+static void
+squirt_loadSkipFile(const char* filename)
+{
+  struct stat st;
+
+  if (stat(filename, &st) == -1) {
+    fatalError("filed to stat %s", filename);
+  }
+
+  int fileLength = st.st_size;
+  squirt_skipFile = calloc(1, fileLength+1);
+  int fd = open(filename,  O_RDONLY);
+  if (fd) {
+    if (read(fd, squirt_skipFile, fileLength) != fileLength) {
+      fatalError("failed to read skipfile %s\n", filename);
+    }
+  } else {
+    fatalError("failed to open skipfile %s\n", filename);
+  }
+}
 
 int
 squirt_backup(int argc, char* argv[])
 {
+  squirt_skipFile = 0;
   currentDir = 0;
+  const char* hostname;
+  char* path;
 
-  if (argc != 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
+  if (argc < 3) {
+    fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", squirt_argv0);
   }
-  const char* hostname = argv[1];
 
-  char* path = argv[2];
+  if (argc == 4) {
+    if (strstr(argv[1], "--skipfile=") == 0) {
+      fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", squirt_argv0);
+    }
+    hostname = argv[2];
+    path = argv[3];
+    squirt_loadSkipFile(strstr(argv[1], "=")+1);
+
+  } else {
+    hostname = argv[1];
+    path = argv[2];
+  }
+
+
   char* token = strtok(path, ":");
   char* dir = 0;
   if (token) {

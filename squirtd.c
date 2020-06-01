@@ -143,6 +143,7 @@ exec_run(int fd, const char* command)
 
   // not exit status, sending 4 null bytes breaks out of the terminal read loop in squirt_execCmd
   // reusing sendStatus for executable size
+
   sendStatus(fd, 0);
 
   if (exec_inputFd) {
@@ -332,15 +333,20 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
 static int16_t
 file_send(int fd, char* filename)
 {
+  int32_t fileSize = -1;
   BPTR lock = Lock((APTR)filename, ACCESS_READ);
   if (!lock) {
+    if (send(fd, (void*)&fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
+      return ERROR_SEND_FAILED;
+    }
     return ERROR_FILE_READ_FAILED;
   }
 
   struct FileInfoBlock fileInfo;
   Examine(lock, &fileInfo);
   UnLock(lock);
-  uint32_t fileSize = fileInfo.fib_Size;
+
+  fileSize = fileInfo.fib_Size;
 
   if (send(fd, (void*)&fileSize, sizeof(fileSize), 0) != sizeof(fileSize)) {
     return ERROR_SEND_FAILED;
@@ -359,7 +365,7 @@ file_send(int fd, char* filename)
 
   squirtd_rxBuffer = malloc(BLOCK_SIZE);
 
-  uint32_t total = 0;
+  int32_t total = 0;
   do {
     int len;
     if ((len = Read(squirtd_inputFd, squirtd_rxBuffer, BLOCK_SIZE) ) < 0) {
