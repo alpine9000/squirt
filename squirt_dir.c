@@ -57,7 +57,7 @@ cleanup(void)
 }
 
 
-static void
+_Noreturn static void
 cleanupAndExit(int errorCode)
 {
   cleanup();
@@ -737,9 +737,7 @@ squirt_dir(int argc, char* argv[])
 
   squirt_processDir(argv[1], argv[2], squirt_dirPrintEntryList);
 
-  exit(EXIT_SUCCESS);
-
-  return 0;
+  cleanupAndExit(EXIT_SUCCESS);  
 }
 
 static void
@@ -752,15 +750,19 @@ squirt_loadSkipFile(const char* filename)
   }
 
   int fileLength = st.st_size;
-  squirt_skipFile = calloc(1, fileLength+1);
+  squirt_skipFile = malloc(fileLength+1);
+  memset(squirt_skipFile, 0, fileLength+1);
   int fd = open(filename,  O_RDONLY);
   if (fd) {
     if (read(fd, squirt_skipFile, fileLength) != fileLength) {
+      close(fd);
       fatalError("failed to read skipfile %s\n", filename);
     }
   } else {
     fatalError("failed to open skipfile %s\n", filename);
   }
+
+  close(fd);  
 }
 
 int
@@ -782,7 +784,6 @@ squirt_backup(int argc, char* argv[])
     hostname = argv[2];
     path = argv[3];
     squirt_loadSkipFile(strstr(argv[1], "=")+1);
-
   } else {
     hostname = argv[1];
     path = argv[2];
@@ -822,14 +823,11 @@ squirt_backup(int argc, char* argv[])
     squirt_backupDir(hostname, dir);
   }
 
-
   if (currentDir) {
     free(currentDir);
   }
 
   printf("\nbackup complete!\n");
 
-  exit(EXIT_SUCCESS);
-
-  return 0;
+  cleanupAndExit(EXIT_SUCCESS);
 }
