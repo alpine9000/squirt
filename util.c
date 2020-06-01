@@ -398,3 +398,17 @@ util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
   }
   return dstlen + srclen;
 }
+
+const char*
+util_getTempFolder(void)
+{
+#ifndef _WIN32
+  return "/tmp/.squirt/";
+#else
+  char buffer[PATH_MAX];
+  static char path[PATH_MAX];
+  GetTempPathA(PATH_MAX, buffer);
+  snprintf(path, sizeof(path), "%s.squirt/", buffer);
+  return path;
+#endif
+}

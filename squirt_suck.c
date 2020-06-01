@@ -34,8 +34,8 @@ cleanup(void)
 }
 
 
-static void
-cleanupAndExit(uint32_t errorCode)
+static _Noreturn void
+cleanupAndExit(int errorCode)
 {
   cleanup();
   exit(errorCode);
@@ -84,7 +84,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     baseName = destFilename;
   }
 
-  fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC, 0777);
+  fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC|_O_BINARY, 0777);
 
   if (!fileFd) {
     fatalError("failed to open %s", baseName);

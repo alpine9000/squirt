@@ -20,7 +20,7 @@ cleanup(void)
 }
 
 
-static void
+static _Noreturn void
 cleanupAndExit(int errorCode)
 {
   cleanup();

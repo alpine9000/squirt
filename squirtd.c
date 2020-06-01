@@ -160,8 +160,12 @@ exec_dir(int fd, const char* dir)
 
   BPTR lock = Lock((APTR)dir, ACCESS_READ);
 
+  squirtd_error = 0;
+
   if (!lock) {
     squirtd_error = ERROR_FILE_READ_FAILED;
+    uint32_t nameLength = 0;
+    send(fd, (void*)&nameLength, sizeof(nameLength), 0);
     goto cleanup;
   }
 
@@ -207,9 +211,10 @@ exec_dir(int fd, const char* dir)
     } while (ead);
   } while (more);
 
-  sendStatus(fd, 0);
 
  cleanup:
+
+  sendStatus(fd, squirtd_error);
 
   if (eac) {
     FreeDosObject(DOS_EXALLCONTROL,eac);
@@ -248,10 +253,9 @@ static void
 exec_cd(int fd, const char* dir)
 {
   BPTR lock = Lock((APTR)dir, ACCESS_READ);
-  uint32_t buffer = 1;
+  squirtd_error = ERROR_CD_FAILED;
 
   if (!lock) {
-    squirtd_error = ERROR_CD_FAILED;
     goto cleanup;
   }
 
@@ -263,14 +267,14 @@ exec_cd(int fd, const char* dir)
 
     if (oldLock) {
       UnLock(oldLock);
-      buffer = 0;
+      squirtd_error = 0;
     }
   } else {
     UnLock(lock);
   }
 
  cleanup:
-  sendStatus(fd, buffer);
+  sendStatus(fd, squirtd_error);
 }
 
 

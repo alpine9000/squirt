@@ -36,7 +36,7 @@ SERVER_APPS=build/amiga/squirtd build/amiga/squirtd.vbcc
 
 all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
 
-client: $(HOST_CLIENT_APPS) 
+client: $(HOST_CLIENT_APPS)
 
 build/squirt: $(SQUIRT_OBJS)
 	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt $(LIBS)

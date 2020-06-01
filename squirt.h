@@ -2,6 +2,7 @@
 
 #ifndef _WIN32
 #include <netinet/in.h>
+#define _O_BINARY 0
 #else
 #include <stdint.h>
 #include <winsock.h>
@@ -128,3 +129,6 @@ util_onCtrlC(void (*handler)(void));
 
 size_t
 util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen);
+
+const char*
+util_getTempFolder(void);

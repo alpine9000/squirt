@@ -35,8 +35,8 @@ cleanup(void)
 }
 
 
-static void
-cleanupAndExit(uint32_t exitCode)
+static _Noreturn void
+cleanupAndExit(int exitCode)
 {
   cleanup();
   exit(exitCode);
@@ -92,7 +92,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
   }
 
 
-  fileFd = util_open(filename, O_RDONLY);
+  fileFd = util_open(filename, O_RDONLY|_O_BINARY);
 
   if (!fileFd) {
     fatalError("failed to open %s", filename);

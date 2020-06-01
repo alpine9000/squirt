@@ -27,7 +27,7 @@ cleanup(void)
     squirt_cliReadLineBase = 0;
   }
 
-  squirt_dirFreeEntryLists();  
+  squirt_dirFreeEntryLists();
   squirt_cliDirEntryList = 0;
 
   if (currentDir) {
@@ -42,7 +42,7 @@ cleanup(void)
 }
 
 
-static void
+static _Noreturn void
 cleanupAndExit(int errorCode)
 {
   cleanup();
@@ -94,7 +94,12 @@ rl_generator(const char *text, int state)
     len = strlen(text);
   }
 
-  dir_entry_t* ptr = squirt_cliDirEntryList->head;
+  dir_entry_t* ptr;
+  if (squirt_cliDirEntryList) {
+    ptr = squirt_cliDirEntryList->head;
+  } else {
+    ptr = 0;
+  }
 
   for (int i = 0; i < list_index && ptr; i++) {
     ptr = ptr->next;
@@ -121,7 +126,7 @@ static char **
 rl_completion(const char *text, int start, int end)
 {
   (void)start,(void)end;
-  rl_attempted_completion_over = 1;
+  //  rl_attempted_completion_over = 1;
   if (squirt_cliReadLineBase) {
     free(squirt_cliReadLineBase);
   }
@@ -165,14 +170,14 @@ squirt_compareFile(const char* one, const char* two)
   if (one == NULL && two == NULL) {
     identical = 1;
     goto cleanup;
-  } 
+  }
 
   if (one) {
-    fd1 = open(one, O_RDONLY);
+    fd1 = open(one, O_RDONLY|_O_BINARY);
   }
 
   if (two) {
-    fd2 = open(two, O_RDONLY);
+    fd2 = open(two, O_RDONLY|_O_BINARY);
   }
 
   if (fd1 == -1 && fd2 == -1) {
@@ -219,13 +224,13 @@ squirt_duplicateFile(const char* from)
   ssize_t nread;
   int saved_errno;
 
-  fd_from = open(from, O_RDONLY);
+  fd_from = open(from, O_RDONLY|_O_BINARY);
   if (fd_from < 0) {
     free(to);
     return 0;
   }
 
-  fd_to = open(to, O_TRUNC|O_WRONLY|O_CREAT , 0666);
+  fd_to = open(to, O_TRUNC|O_WRONLY|O_CREAT|_O_BINARY , 0666);
   if (fd_to < 0) {
     goto out_error;
   }
@@ -315,12 +320,13 @@ squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const c
   replace_char(local, '/', '_');
   replace_char(local, ':', '_');
 
-  int localFilenameLength = strlen(remote) + strlen("/tmp/.squirt.") + 1;
+  const char *tempPath = util_getTempFolder();
+  int localFilenameLength = strlen(remote) + strlen(tempPath) + 1;
   file->remoteFilename = (char*)remote;
   file->localFilename = malloc(localFilenameLength);
-  snprintf(file->localFilename, localFilenameLength, "/tmp/.squirt/%s", local);
+  snprintf(file->localFilename, localFilenameLength, "%s%s", tempPath, local);
   free(local);
-  util_mkdir("/tmp/.squirt", 0777);
+  util_mkdir(tempPath, 0777);
 
   if (squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename) < 0) {
     unlink(file->localFilename);
@@ -414,7 +420,9 @@ squirt_cliRunCommand(const char* hostname, char* line)
   char** argv = argv_build((char*)line);
   int argc = argv_argc(argv);
 
-  if (argc == 2 && strcmp("cd", argv[0]) == 0) {
+  if (strcmp("endcli", argv[0]) == 0) {
+    cleanupAndExit(EXIT_SUCCESS);
+  } else if (argc == 2 && strcmp("cd", argv[0]) == 0) {
     if (squirt_execCmd(hostname, argc, argv) == 0) {
       changeDir(argv[1]);
       code = 1;

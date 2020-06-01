@@ -57,7 +57,7 @@ cleanup(void)
 }
 
 
-_Noreturn static void
+static _Noreturn  void
 cleanupAndExit(int errorCode)
 {
   cleanup();
@@ -345,7 +345,8 @@ squirt_dirRead(const char* hostname, const char* command)
   }
 
   if (error != 0) {
-    fatalError("%s", util_getErrorString(error));
+    squirt_dirFreeEntryList(entryList);
+    entryList = 0;
   }
 
   cleanup();
@@ -354,22 +355,30 @@ squirt_dirRead(const char* hostname, const char* command)
 }
 
 
-static void
+static int
 squirt_processDir(const char* hostname, const char* command, void(*process)(const char* hostname, dir_entry_list_t*))
 {
+  int error = 0;
   dir_entry_list_t *entryList = squirt_dirRead(hostname, command);
 
-  if (process) {
-    process(hostname, entryList);
-  }
+  if (entryList == 0) {
+    error = -1;
+  } else {
+    if (process) {
+      process(hostname, entryList);
+    }
 
-  squirt_dirFreeEntryList(entryList);
+    squirt_dirFreeEntryList(entryList);
+  }
+  return error;
 }
 
 
-static void
+static int
 squirt_cd(const char* hostname, const char* dir)
 {
+  uint32_t error = 0;
+
   if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_CD)) < 0) {
     fatalError("failed to connect to squirtd server");
   }
@@ -378,28 +387,11 @@ squirt_cd(const char* hostname, const char* dir)
     fatalError("send() command failed");
   }
 
-  uint8_t c;
-  while (util_recv(socketFd, &c, 1, 0)) {
-    if (c == 0) {
-      break;
-    } else if (c == 0x9B) {
-      fprintf(stdout, "%c[", 27);
-      fflush(stdout);
-    } else {
-      int ignore = write(1, &c, 1);
-      (void)ignore;
-    }
-  }
-
-  uint32_t error;
-
   if (util_recvU32(socketFd, &error) != 0) {
     fatalError("cd: failed to read remote status");
   }
 
-  if (error != 0) {
-    fatalError("%s", util_getErrorString(error));
-  }
+  return error;
 
 }
 
@@ -452,7 +444,9 @@ pushDir(const char* hostname, const char* dir)
     strcpy(currentDir, dir);
   }
 
-  squirt_cd(hostname, currentDir);
+  if (squirt_cd(hostname, currentDir) != 0) {
+    fatalError("unable to backup %s", currentDir);
+  }
 
   char* safe = safeName(dir);
   if (!safe) {
@@ -721,7 +715,9 @@ squirt_backupDir(const char* hostname, const char* dir)
 {
   char* cwd = pushDir(hostname, dir);
   printf("%s/ \xE2\x9C\x93\n", currentDir);
-  squirt_processDir(hostname, currentDir, backupList);
+  if (squirt_processDir(hostname, currentDir, backupList) != 0) {
+    fatalError("unable to read %s", dir);
+  }
   popDir(cwd);
 }
 
@@ -735,9 +731,11 @@ squirt_dir(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
   }
 
-  squirt_processDir(argv[1], argv[2], squirt_dirPrintEntryList);
+  if (squirt_processDir(argv[1], argv[2], squirt_dirPrintEntryList) != 0) {
+    fatalError("unable to read %s", argv[2]);
+  }
 
-  cleanupAndExit(EXIT_SUCCESS);  
+  cleanupAndExit(EXIT_SUCCESS);
 }
 
 static void
@@ -752,7 +750,7 @@ squirt_loadSkipFile(const char* filename)
   int fileLength = st.st_size;
   squirt_skipFile = malloc(fileLength+1);
   memset(squirt_skipFile, 0, fileLength+1);
-  int fd = open(filename,  O_RDONLY);
+  int fd = open(filename,  O_RDONLY|_O_BINARY);
   if (fd) {
     if (read(fd, squirt_skipFile, fileLength) != fileLength) {
       close(fd);
@@ -762,7 +760,7 @@ squirt_loadSkipFile(const char* filename)
     fatalError("failed to open skipfile %s\n", filename);
   }
 
-  close(fd);  
+  close(fd);
 }
 
 int
