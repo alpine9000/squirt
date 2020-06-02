@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "squirt.h"
+#include "main.h"
 
 #include <readline/readline.h>
 #include <readline/history.h>
 
 static char* srl_line_read = 0;
+static const char* (*_srl_prompt)(void);
 static void (*_srl_complete_hook)(const char* text);
 static char* (*_srl_generator)(int* list_index, const char* text, int len);
 
@@ -54,7 +55,8 @@ srl_gets(void)
     srl_line_read = (char *)NULL;
   }
 
-  srl_line_read = readline(squirt_prompt());
+
+  srl_line_read = readline(_srl_prompt ? _srl_prompt() :  "");
 
   if (srl_line_read && *srl_line_read) {
     add_history (srl_line_read);
@@ -169,11 +171,12 @@ srl_completion_function(const char *text, int start, int end)
 
 
 void
-srl_init(void (*complete_hook)(const char* text), char* (*generator)(int* list_index, const char* text, int len))
+srl_init(const char*(*prompt)(void),void (*complete_hook)(const char* text), char* (*generator)(int* list_index, const char* text, int len))
 {
   using_history();
   read_history(util_getHistoryFile());
 
+  _srl_prompt = prompt;
   _srl_generator = generator;
   _srl_complete_hook = complete_hook;
   rl_attempted_completion_function = srl_completion_function;

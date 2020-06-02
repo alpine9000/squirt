@@ -5,60 +5,40 @@
 #include <unistd.h>
 
 #include "argv.h"
-#include "squirt.h"
+#include "main.h"
 #include "common.h"
 
-static int socketFd = 0;
-static char* command = 0;
+static int exec_socketFd = 0;
+static char* exec_command = 0;
 
 
-static void
-cleanup(void)
+void
+exec_cleanup(void)
 {
-  if (command) {
-    free(command);
-    command = 0;
+  if (exec_command) {
+    free(exec_command);
+    exec_command = 0;
   }
 
-  if (socketFd > 0) {
-    close(socketFd);
-    socketFd = 0;
+  if (exec_socketFd > 0) {
+    close(exec_socketFd);
+    exec_socketFd = 0;
   }
 }
 
-
-static _Noreturn void
-cleanupAndExit(int errorCode)
-{
-  cleanup();
-  exit(errorCode);
-}
-
-
-static void
-fatalError(const char *format, ...)
-{
-  va_list args;
-  va_start(args, format);
-  fprintf(stderr, "%s: ", squirt_argv0);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  fprintf(stderr, "\n");
-  cleanupAndExit(EXIT_FAILURE);
-}
 
 int
-squirt_execCmd(const char* hostname, int argc, char** argv)
+exec_cmd(const char* hostname, int argc, char** argv)
 {
   uint8_t commandCode;
   int commandLength = 0;
-  socketFd = 0;
-  command = 0;
+  exec_socketFd = 0;
+  exec_command = 0;
 
   if (argc == 2 && strcmp("cd", argv[0]) == 0) {
     commandLength = strlen(argv[1]);
-    command = malloc(commandLength+1);
-    strcpy(command, argv[1]);
+    exec_command = malloc(commandLength+1);
+    strcpy(exec_command, argv[1]);
     commandCode = SQUIRT_COMMAND_CD;
   } else {
     for (int i = 0; i < argc; i++) {
@@ -66,20 +46,20 @@ squirt_execCmd(const char* hostname, int argc, char** argv)
       commandLength++;
     }
 
-    command = malloc(commandLength+1);
-    strcpy(command, argv[0]);
+    exec_command = malloc(commandLength+1);
+    strcpy(exec_command, argv[0]);
     for (int i = 1; i < argc; i++) {
-      strcat(command, " ");
-      strcat(command, argv[i]);
+      strcat(exec_command, " ");
+      strcat(exec_command, argv[i]);
     }
     commandCode = SQUIRT_COMMAND_CLI;
   }
 
-  if ((socketFd = util_connect(hostname, commandCode)) < 0) {
+  if ((exec_socketFd = util_connect(hostname, commandCode)) < 0) {
     fatalError("failed to connect to squirtd server");
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, command) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(exec_socketFd, exec_command) != 0) {
     fatalError("send() command failed");
   }
 
@@ -90,7 +70,7 @@ squirt_execCmd(const char* hostname, int argc, char** argv)
     int bindex = 0;
 #endif
     int exitState = 0;
-    while (util_recv(socketFd, &c, 1, 0)) {
+    while (util_recv(exec_socketFd, &c, 1, 0)) {
       if (c == 0) {
 	exitState++;
 	if (exitState == 4) {
@@ -122,17 +102,17 @@ squirt_execCmd(const char* hostname, int argc, char** argv)
 
   uint32_t error;
 
-  if (util_recvU32(socketFd, &error) != 0) {
+  if (util_recvU32(exec_socketFd, &error) != 0) {
     fatalError("exec: failed to read remote status");
   }
 
-  cleanup();
+  exec_cleanup();
 
   return error;
 }
 
 int
-squirt_exec(int argc, char* argv[])
+exec_main(int argc, char* argv[])
 {
   if (argc < 3) {
     fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
@@ -146,13 +126,13 @@ squirt_exec(int argc, char* argv[])
 
   argc-=2;
 
-  uint32_t error = squirt_execCmd(hostname, argc, argv);
+  uint32_t error = exec_cmd(hostname, argc, argv);
 
   if (error != 0) {
     fatalError("%s", util_getErrorString(error));
   }
 
-  cleanupAndExit(EXIT_SUCCESS);
+  main_cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }

@@ -7,52 +7,31 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 
-#include "squirt.h"
+#include "main.h"
 #include "common.h"
 
-static int socketFd = 0;
-static int fileFd = 0;
-static char* readBuffer = 0;
+static int squirt_socketFd = 0;
+static int squirt_fileFd = 0;
+static char* squirt_readBuffer = 0;
 
 
-static void
-cleanup(void)
+void
+squirt_cleanup(void)
 {
-  if (readBuffer) {
-    free(readBuffer);
-    readBuffer = 0;
+  if (squirt_readBuffer) {
+    free(squirt_readBuffer);
+    squirt_readBuffer = 0;
   }
 
-  if (socketFd > 0) {
-    close(socketFd);
-    socketFd = 0;
+  if (squirt_socketFd > 0) {
+    close(squirt_socketFd);
+    squirt_socketFd = 0;
   }
 
-  if (fileFd) {
-    close(fileFd);
-    fileFd = 0;
+  if (squirt_fileFd) {
+    close(squirt_fileFd);
+    squirt_fileFd = 0;
   }
-}
-
-
-static _Noreturn void
-cleanupAndExit(int exitCode)
-{
-  cleanup();
-  exit(exitCode);
-}
-
-
-static void
-fatalError(const char *format, ...)
-{
-  va_list args;
-  va_start(args, format);
-  fprintf(stderr, "%s: ", squirt_argv0);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  fprintf(stderr, "\n");
-  cleanupAndExit(EXIT_FAILURE);
 }
 
 
@@ -71,7 +50,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
   fileLength = st.st_size;
 
-  if ((socketFd = util_connect(hostname, writeToCurrentDir ? SQUIRT_COMMAND_SQUIRT_TO_CWD : SQUIRT_COMMAND_SQUIRT)) < 0) {
+  if ((squirt_socketFd = util_connect(hostname, writeToCurrentDir ? SQUIRT_COMMAND_SQUIRT_TO_CWD : SQUIRT_COMMAND_SQUIRT)) < 0) {
     fatalError("failed to connect to squirtd server");
   }
 
@@ -83,22 +62,22 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
     amigaFilename = basename((char*)filename);
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, amigaFilename) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(squirt_socketFd, amigaFilename) != 0) {
     fatalError("send() name failed");
   }
 
-  if (util_sendU32(socketFd, fileLength) != 0) {
+  if (util_sendU32(squirt_socketFd, fileLength) != 0) {
     fatalError("send() fileLength failed");
   }
 
 
-  fileFd = util_open(filename, O_RDONLY|_O_BINARY);
+  squirt_fileFd = util_open(filename, O_RDONLY|_O_BINARY);
 
-  if (!fileFd) {
+  if (!squirt_fileFd) {
     fatalError("failed to open %s", filename);
   }
 
-  readBuffer = malloc(BLOCK_SIZE);
+  squirt_readBuffer = malloc(BLOCK_SIZE);
 
   if (progress) {
     printf("squirting %s (%s bytes)\n", filename, util_formatNumber(fileLength));
@@ -107,10 +86,10 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
   do {
     int len;
-    if ((len = read(fileFd, readBuffer, BLOCK_SIZE) ) < 0) {
+    if ((len = read(squirt_fileFd, squirt_readBuffer, BLOCK_SIZE) ) < 0) {
       fatalError("failed to read %s", filename);
     } else {
-      if ((send(socketFd, readBuffer, len, 0)) != len) {
+      if ((send(squirt_socketFd, squirt_readBuffer, len, 0)) != len) {
 	fatalError("send() failed");
       }
       //      int old = total;
@@ -130,7 +109,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
   uint32_t error;
 
-  if (util_recvU32(socketFd, &error) != 0) {
+  if (util_recvU32(squirt_socketFd, &error) != 0) {
     fatalError("squirt: failed to read remote status");
   }
 
@@ -150,8 +129,9 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
   return error;
 }
 
+
 int
-squirt(int argc, char* argv[])
+squirt_main(int argc, char* argv[])
 {
   if (argc != 3) {
     fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
@@ -159,7 +139,7 @@ squirt(int argc, char* argv[])
 
   squirt_file(argv[1], argv[2], 0, 0, 1);
 
-  cleanupAndExit(EXIT_SUCCESS);
+  main_cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }

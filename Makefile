@@ -10,14 +10,15 @@ STATIC_ANALYZE=-fanalyzer
 endif
 
 SQUIRTD_SRCS=squirtd.c
-SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c squirt_cli.c squirt_cwd.c srl.c util.c argv.c
+SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd
+HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h
 
 VBCC_CC=vc
 AMIGA_GCC_PREFIX=/usr/local/amiga/bebbo
 AMIGA_GCC=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-amigaos/ndk-include/
 
-DEBUG_CFLAGS=-g -fsanitize=address -fsanitize=undefined $(STATIC_ANALYZE)
+DEBUG_CFLAGS=-g #-fsanitize=address -fsanitize=undefined $(STATIC_ANALYZE)
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
 
 CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
@@ -44,15 +45,15 @@ build/squirt: $(SQUIRT_OBJS)
 build/squirt_%: $(SQUIRT_OBJS)
 	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_$* $(LIBS)
 
-build/obj/%.o: %.c squirt.h common.h Makefile
+build/obj/%.o: %.c $(HEADERS) common.h Makefile
 	@mkdir -p build/obj
 	$(CC) -c $(CFLAGS) $*.c -o build/obj/$*.o
 
-build/obj/amiga/%.o: %.c squirt.h common.h  Makefile
+build/obj/amiga/%.o: %.c common.h  Makefile
 	@mkdir -p build/obj/amiga
 	vc -c $(VBCC_CFLAGS) $*.c -c -o build/obj/amiga/$*.o
 
-build/obj/amiga.gcc/%.o: %.c squirt.h common.h Makefile
+build/obj/amiga.gcc/%.o: %.c common.h Makefile
 	@mkdir -p build/obj/amiga.gcc
 	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) $*.c -c -o build/obj/amiga.gcc/$*.o
 

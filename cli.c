@@ -10,103 +10,67 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-#include "squirt.h"
+#include "main.h"
 #include "common.h"
 #include "argv.h"
 
-static const char* squirt_cliHostname = 0;
-static char* currentDir = 0;
-static dir_entry_list_t *squirt_cliDirEntryList;
-static char* squirt_cliReadLineBase = 0;
+typedef struct hostfile {
+  char* localFilename;
+  char* backupFilename;
+  char** argv;
+  char* remoteFilename;
+  struct hostfile* next;
+} cli_hostfile_t;
 
-static void
-cleanup(void)
+
+static const char* cli_hostname = 0;
+static char* cli_currentDir = 0;
+static dir_entry_list_t *cli_dirEntryList = 0;
+static char* cli_readLineBase = 0;
+
+void
+cli_cleanup(void)
 {
-  if (squirt_cliReadLineBase) {
-    free(squirt_cliReadLineBase);
-    squirt_cliReadLineBase = 0;
+  if (cli_readLineBase) {
+    free(cli_readLineBase);
+    cli_readLineBase = 0;
   }
 
-  squirt_dirFreeEntryLists();
-  squirt_cliDirEntryList = 0;
+  dir_freeEntryLists();
+  cli_dirEntryList = 0;
 
-  if (currentDir) {
-    free(currentDir);
-    currentDir = 0;
+  if (cli_currentDir) {
+    free(cli_currentDir);
+    cli_currentDir = 0;
   }
-
-  srl_cleanup();
 }
 
-
-static _Noreturn void
-cleanupAndExit(int errorCode)
-{
-  cleanup();
-  exit(errorCode);
-}
-
-
-static void
-fatalError(const char *format, ...)
-{
-  va_list args;
-  va_start(args, format);
-  fprintf(stderr, "%s: ", squirt_argv0);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  fprintf(stderr, "\n");
-  cleanupAndExit(EXIT_FAILURE);
-}
 
 static int
-changeDir(const char* dir)
+cli_changeDir(const char* dir)
 {
-  if (currentDir) {
-    free(currentDir);
-    currentDir = 0;
+  if (cli_currentDir) {
+    free(cli_currentDir);
+    cli_currentDir = 0;
   }
 
-  currentDir = malloc(strlen(dir)+1);
-  strcpy(currentDir, dir);
+  cli_currentDir = malloc(strlen(dir)+1);
+  strcpy(cli_currentDir, dir);
   return 1;
 }
 
+
 const char*
-squirt_prompt(void)
+cli_prompt(void)
 {
   static char buffer[256];
-  snprintf(buffer, sizeof(buffer), "1.%s> ", currentDir);
+  snprintf(buffer, sizeof(buffer), "1.%s> ", cli_currentDir);
   return buffer;
 }
 
-#if 0
-static char*
-escape_spaces(char* str)
-{
-  int numSpaces = 0;
-  for (unsigned int i = 0; i < strlen(str); i++) {
-    if (str[i] == ' ') {
-      numSpaces++;
-    }
-  }
-  char* ptr = malloc(strlen(str)+numSpaces+1);
-  int j = 0;
-  for (unsigned int i = 0; i < strlen(str); i++) {
-    if (str[i] == ' ') {
-      ptr[j++] ='\\';
-    }
-    ptr[j++] = str[i];
-  }
-  ptr[j] = 0;
-  return ptr;
-}
-#endif
-
-
 
 static int
-squirt_compareFile(const char* one, const char* two)
+cli_compareFile(const char* one, const char* two)
 {
   int identical = 1, fd1 = -1, fd2 = -1;
 
@@ -155,8 +119,9 @@ squirt_compareFile(const char* one, const char* two)
   return identical;
 }
 
+
 static char*
-squirt_duplicateFile(const char* from)
+cli_duplicateFile(const char* from)
 {
   int toLength = strlen(from) + strlen(".orig") + 1;
   char *to = malloc(toLength);
@@ -220,8 +185,9 @@ squirt_duplicateFile(const char* from)
   return 0;
 }
 
+
 static char*
-replace_char(char* str, char find, char replace)
+cli_replaceChar(char* str, char find, char replace)
 {
   char *current_pos = strchr(str,find);
   while (current_pos){
@@ -232,17 +198,8 @@ replace_char(char* str, char find, char replace)
 }
 
 
-typedef struct hostfile {
-  char* localFilename;
-  char* backupFilename;
-  char** argv;
-  char* remoteFilename;
-  struct hostfile* next;
-} squirt_hostfile_t;
-
-
 static void
-squirt_freeHostFile(squirt_hostfile_t* file)
+cli_freeHostFile(cli_hostfile_t* file)
 {
   if (file) {
     if (file->localFilename) {
@@ -255,13 +212,13 @@ squirt_freeHostFile(squirt_hostfile_t* file)
   }
 }
 
-static squirt_hostfile_t*
-squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const char* remote)
+static cli_hostfile_t*
+cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* remote)
 {
-  squirt_hostfile_t *file = calloc(1, sizeof(squirt_hostfile_t));
+  cli_hostfile_t *file = calloc(1, sizeof(cli_hostfile_t));
   char* local = strdup(remote);
-  replace_char(local, '/', '_');
-  replace_char(local, ':', '_');
+  cli_replaceChar(local, '/', '_');
+  cli_replaceChar(local, ':', '_');
 
   const char *tempPath = util_getTempFolder();
   int localFilenameLength = strlen(remote) + strlen(tempPath) + 1;
@@ -280,9 +237,9 @@ squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const c
     if (error < 0) {
       unlink(file->localFilename);
     }
-    file->backupFilename = squirt_duplicateFile(file->localFilename);
+    file->backupFilename = cli_duplicateFile(file->localFilename);
     if (*list) {
-      squirt_hostfile_t* ptr = *list;
+      cli_hostfile_t* ptr = *list;
       while (ptr->next) {
 	ptr = ptr->next;
       }
@@ -297,27 +254,28 @@ squirt_convertFileToHost(const char* hostname, squirt_hostfile_t** list, const c
 
 
 static int
-squirt_saveFileIfModified(const char* hostname, squirt_hostfile_t* file)
+cli_saveFileIfModified(const char* hostname, cli_hostfile_t* file)
 {
   int success = 0;
-  if (squirt_compareFile(file->localFilename, file->backupFilename) == 0) {
+  if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
     success = squirt_file(hostname, file->localFilename, file->remoteFilename, 1, 0) == 0;
   }
 
   return success;
 }
 
+
 static int
-squirt_hostCommand(const char* hostname, int argc, char** argv)
+cli_hostCommand(const char* hostname, int argc, char** argv)
 {
   int success = 0;
   (void)argc,(void)argv;
 
-  squirt_hostfile_t* list = 0;
+  cli_hostfile_t* list = 0;
 
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] != '~' && argv[i][0] != '!' && argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
-      squirt_hostfile_t* hostFile = squirt_convertFileToHost(hostname, &list, argv[i]);
+      cli_hostfile_t* hostFile = cli_convertFileToHost(hostname, &list, argv[i]);
       if (hostFile) {
 	hostFile->argv = &argv[i];
 	argv[i] = hostFile->localFilename;
@@ -341,13 +299,13 @@ squirt_hostCommand(const char* hostname, int argc, char** argv)
 
  error:
   {
-    squirt_hostfile_t* file = list;
+    cli_hostfile_t* file = list;
     while (file) {
-      squirt_saveFileIfModified(hostname, file);
-      squirt_hostfile_t* save = file;
+      cli_saveFileIfModified(hostname, file);
+      cli_hostfile_t* save = file;
       file = file->next;
       *save->argv = save->remoteFilename;
-      squirt_freeHostFile(save);
+      cli_freeHostFile(save);
     }
   }
 
@@ -356,7 +314,7 @@ squirt_hostCommand(const char* hostname, int argc, char** argv)
 
 
 static int
-squirt_cliRunCommand(const char* hostname, char* line)
+cli_runCommand(const char* hostname, char* line)
 {
   int code;
   int end = strlen(line);
@@ -368,19 +326,19 @@ squirt_cliRunCommand(const char* hostname, char* line)
   int argc = argv_argc(argv);
 
   if (strcmp("endcli", argv[0]) == 0) {
-    cleanupAndExit(EXIT_SUCCESS);
+    main_cleanupAndExit(EXIT_SUCCESS);
   } else if (argc == 2 && strcmp("cd", argv[0]) == 0) {
-    if (squirt_execCmd(hostname, argc, argv) == 0) {
-      changeDir(argv[1]);
+    if (exec_cmd(hostname, argc, argv) == 0) {
+      cli_changeDir(argv[1]);
       code = 1;
     } else {
       printf("cd: %s failed\n", argv[1]);
       code = 0;
     }
   } else if (argv[0][0] == '!') {
-    code = squirt_hostCommand(hostname, argc, argv);
+    code = cli_hostCommand(hostname, argc, argv);
   } else {
-    code = squirt_execCmd(hostname, argc, argv);
+    code = exec_cmd(hostname, argc, argv);
   }
 
   argv_free(argv);
@@ -390,19 +348,19 @@ squirt_cliRunCommand(const char* hostname, char* line)
 
 
 static void
-squirt_cliOnExit(void)
+cli_onExit(void)
 {
   srl_write_history();
-  cleanupAndExit(EXIT_SUCCESS);
+  main_cleanupAndExit(EXIT_SUCCESS);
 }
 
 
 static char*
-squirt_cliCompleteGenerator(int* list_index, const char* text, int len)
+cli_completeGenerator(int* list_index, const char* text, int len)
 {
   dir_entry_t* ptr;
-  if (squirt_cliDirEntryList) {
-    ptr = squirt_cliDirEntryList->head;
+  if (cli_dirEntryList) {
+    ptr = cli_dirEntryList->head;
   } else {
     ptr = 0;
   }
@@ -417,7 +375,7 @@ squirt_cliCompleteGenerator(int* list_index, const char* text, int len)
     ptr = ptr->next;
 
     char buffer[256];
-    snprintf(buffer, 256, "%s%s", squirt_cliReadLineBase, entry->name);
+    snprintf(buffer, 256, "%s%s", cli_readLineBase, entry->name);
 
     if (strncmp(buffer, text, len) == 0) {
       rl_completion_append_character = entry->type > 0 ? '/' : ' ';
@@ -430,55 +388,55 @@ squirt_cliCompleteGenerator(int* list_index, const char* text, int len)
 
 
 static void
-squirt_cliCompleteHook(const char* text)
+cli_completeHook(const char* text)
 {
-  if (squirt_cliReadLineBase) {
-    free(squirt_cliReadLineBase);
+  if (cli_readLineBase) {
+    free(cli_readLineBase);
   }
 
-  squirt_cliReadLineBase = strdup(text);
+  cli_readLineBase = strdup(text);
 
-  int ei = strlen(squirt_cliReadLineBase);
-  while (ei >= 0 && squirt_cliReadLineBase[ei] != '/' && squirt_cliReadLineBase[ei] != ':') {
-    squirt_cliReadLineBase[ei] = 0;
+  int ei = strlen(cli_readLineBase);
+  while (ei >= 0 && cli_readLineBase[ei] != '/' && cli_readLineBase[ei] != ':') {
+    cli_readLineBase[ei] = 0;
     ei--;
   }
-  if (squirt_cliDirEntryList) {
-    squirt_dirFreeEntryList(squirt_cliDirEntryList);
+  if (cli_dirEntryList) {
+    dir_freeEntryList(cli_dirEntryList);
   }
-  squirt_cliDirEntryList = squirt_dirRead(squirt_cliHostname, squirt_cliReadLineBase);
+  cli_dirEntryList = dir_read(cli_hostname, cli_readLineBase);
 }
 
 
 int
-squirt_cli(int argc, char* argv[])
+cli_main(int argc, char* argv[])
 {
   (void)argc,(void)argv;
 
-  squirt_cliDirEntryList = 0;
-  squirt_cliReadLineBase = 0;
+  cli_dirEntryList = 0;
+  cli_readLineBase = 0;
 
   if (argc != 2) {
     fatalError("incorrect number of arguments\nusage: %s hostname", squirt_argv0);
   }
 
-  squirt_cliHostname = argv[1];
+  cli_hostname = argv[1];
 
-  util_onCtrlC(squirt_cliOnExit);
+  util_onCtrlC(cli_onExit);
 
-  srl_init(squirt_cliCompleteHook, squirt_cliCompleteGenerator);
+  srl_init(cli_prompt, cli_completeHook, cli_completeGenerator);
 
   do {
-    const char* cwd = squirt_cwdRead(squirt_cliHostname);
+    const char* cwd = cwd_read(cli_hostname);
     if (!cwd) {
       fatalError("failed to get cwd");
     }
-    changeDir(cwd);
+    cli_changeDir(cwd);
     free((void*)cwd);
     char* command = srl_gets();
     if (command && strlen(command)) {
       add_history(command);
-      squirt_cliRunCommand(argv[1], command);
+      cli_runCommand(argv[1], command);
     }
   } while (1);
 

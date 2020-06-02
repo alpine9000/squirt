@@ -1,10 +1,12 @@
 #include <string.h>
 #include <libgen.h>
 #include <locale.h>
-#include <sys/time.h>
-#include "squirt.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <unistd.h>
+#include <sys/time.h>
+
+#include "main.h"
 
 #ifndef _WIN32
 #include <sys/ioctl.h>
@@ -12,6 +14,33 @@
 
 const char* squirt_argv0;
 int squirt_screenWidth = 0;
+
+_Noreturn void
+main_cleanupAndExit(int errorCode)
+{
+  backup_cleanup();
+  cli_cleanup();
+  cwd_cleanup();
+  exec_cleanup();
+  suck_cleanup();
+  dir_cleanup();
+  srl_cleanup();
+  squirt_cleanup();
+  exit(errorCode);
+}
+
+
+void
+main_fatalError(const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  fprintf(stderr, "%s: ", squirt_argv0);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fprintf(stderr, "\n");
+  main_cleanupAndExit(EXIT_FAILURE);
+}
 
 int main(int argc, char* argv[])
 {
@@ -31,28 +60,28 @@ int main(int argc, char* argv[])
 #endif
 
   if (strstr(basename(argv[0]), "squirt_suck")) {
-    return squirt_suck(argc, argv);
+    return suck_main(argc, argv);
   }
 
   if (strstr(basename(argv[0]), "squirt_exec")) {
-    return squirt_exec(argc, argv);
+    return exec_main(argc, argv);
   }
 
   if (strstr(basename(argv[0]), "squirt_cli")) {
-    return squirt_cli(argc, argv);
+    return cli_main(argc, argv);
   }
 
   if (strstr(basename(argv[0]), "squirt_dir")) {
-    return squirt_dir(argc, argv);
+    return dir_main(argc, argv);
   }
 
   if (strstr(basename(argv[0]), "squirt_backup")) {
-    return squirt_backup(argc, argv);
+    return backup_main(argc, argv);
   }
 
   if (strstr(basename(argv[0]), "squirt_cwd")) {
-    return squirt_cwd(argc, argv);
+    return cwd_main(argc, argv);
   }
 
-  return squirt(argc, argv);
+  return squirt_main(argc, argv);
 }

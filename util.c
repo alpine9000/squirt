@@ -15,7 +15,7 @@
 #include <arpa/inet.h>
 #endif
 
-#include "squirt.h"
+#include "main.h"
 #include "common.h"
 #include "argv.h"
 

@@ -5,53 +5,32 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#include "squirt.h"
+#include "main.h"
 #include "common.h"
 
-static int socketFd = 0;
-static int fileFd = 0;
-static char* readBuffer = 0;
-static struct timeval squirt_suckStart;
+static int suck_socketFd = 0;
+static int suck_fileFd = 0;
+static char* suck_readBuffer = 0;
+static struct timeval suck_start;
 
 
-static void
-cleanup(void)
+void
+suck_cleanup(void)
 {
-  if (readBuffer) {
-    free(readBuffer);
-    readBuffer = 0;
+  if (suck_readBuffer) {
+    free(suck_readBuffer);
+    suck_readBuffer = 0;
   }
 
-  if (socketFd > 0) {
-    close(socketFd);
-    socketFd = 0;
+  if (suck_socketFd > 0) {
+    close(suck_socketFd);
+    suck_socketFd = 0;
   }
 
-  if (fileFd) {
-    close(fileFd);
-    fileFd = 0;
+  if (suck_fileFd) {
+    close(suck_fileFd);
+    suck_fileFd = 0;
   }
-}
-
-
-static _Noreturn void
-cleanupAndExit(int errorCode)
-{
-  cleanup();
-  exit(errorCode);
-}
-
-
-static void
-fatalError(const char *format, ...)
-{
-  va_list args;
-  va_start(args, format);
-  fprintf(stderr, "%s: ", squirt_argv0);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  fprintf(stderr, "\n");
-  cleanupAndExit(EXIT_FAILURE);
 }
 
 
@@ -62,17 +41,17 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
   fflush(stdout);
 
-  if ((socketFd = util_connect(hostname, SQUIRT_COMMAND_SUCK)) < 0) {
+  if ((suck_socketFd = util_connect(hostname, SQUIRT_COMMAND_SUCK)) < 0) {
     fatalError("failed to connect to squirtd server");
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(socketFd, filename) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(suck_socketFd, filename) != 0) {
     fatalError("send() filename failed");
   }
 
 
   int32_t fileLength;
-  if (util_recv32(socketFd, &fileLength) != 0) {
+  if (util_recv32(suck_socketFd, &fileLength) != 0) {
     fatalError("util_recv() Filelength failed");
   }
 
@@ -84,13 +63,13 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     baseName = destFilename;
   }
 
-  fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC|_O_BINARY, 0777);
+  suck_fileFd = open(baseName, O_WRONLY|O_CREAT|O_TRUNC|_O_BINARY, 0777);
 
-  if (!fileFd) {
+  if (!suck_fileFd) {
     fatalError("failed to open %s", baseName);
   }
 
-  readBuffer = malloc(BLOCK_SIZE);
+  suck_readBuffer = malloc(BLOCK_SIZE);
 
   if (fileLength > 0) {
     if (progress) {
@@ -99,7 +78,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
     fflush(stdout);
 
-    gettimeofday(&squirt_suckStart, NULL);
+    gettimeofday(&suck_start, NULL);
 
     do {
       int len, requestLength;
@@ -108,15 +87,15 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
       } else {
 	requestLength = fileLength - total;
       }
-      if ((len = util_recv(socketFd, readBuffer, requestLength, 0)) < 0) {
+      if ((len = util_recv(suck_socketFd, suck_readBuffer, requestLength, 0)) < 0) {
 	fflush(stdout);
 	fatalError("\n%s failed to read", squirt_argv0);
       } else {
 	if (progress) {
-	  util_printProgress(&squirt_suckStart, total, fileLength);
+	  util_printProgress(&suck_start, total, fileLength);
 	}
 	int readLen;
-	if ((readLen = write(fileFd, readBuffer, len)) != len) {
+	if ((readLen = write(suck_fileFd, suck_readBuffer, len)) != len) {
 	  fflush(stdout);
 	  fatalError("\nailed to write to %s %d",  baseName, readLen);
 	}
@@ -125,7 +104,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     } while (total < fileLength);
 
     if (progress) {
-      util_printProgress(&squirt_suckStart, total, fileLength);
+      util_printProgress(&suck_start, total, fileLength);
       fflush(stdout);
     }
   } else {
@@ -134,7 +113,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
 
   uint32_t error;
-  if (util_recvU32(socketFd, &error) != 0) {
+  if (util_recvU32(suck_socketFd, &error) != 0) {
     fatalError("suck: failed to read remote status");
   }
 
@@ -145,14 +124,14 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
     }
   }
 
-  cleanup();
+  suck_cleanup();
 
   return total;
 }
 
 
 int
-squirt_suck(int argc, char* argv[])
+suck_main(int argc, char* argv[])
 {
   if (argc != 3) {
     fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
@@ -163,8 +142,8 @@ squirt_suck(int argc, char* argv[])
   struct timeval end;
 
   gettimeofday(&end, NULL);
-  long seconds = end.tv_sec - squirt_suckStart.tv_sec;
-  long micros = ((seconds * 1000000) + end.tv_usec) - squirt_suckStart.tv_usec;
+  long seconds = end.tv_sec - suck_start.tv_sec;
+  long micros = ((seconds * 1000000) + end.tv_usec) - suck_start.tv_usec;
 
   const char* baseName = util_amigaBaseName(argv[2]);
 
@@ -174,7 +153,7 @@ squirt_suck(int argc, char* argv[])
   util_printFormatSpeed(length, ((double)micros)/1000000.0f);
   printf("\n");
 
-  cleanupAndExit(EXIT_SUCCESS);
+  main_cleanupAndExit(EXIT_SUCCESS);
 
   return 0;
 }
