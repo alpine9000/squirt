@@ -437,6 +437,7 @@ util_isDirectory(const char *path)
 int
 util_system(char** argv)
 {
+
   int argc = argv_argc(argv);
   int commandLength = 0;
   for (int i = 0; i < argc; i++) {

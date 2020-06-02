@@ -166,6 +166,9 @@ char **argv_build (char* input)
 		      else if (*input == '"')
 			{
 			  dquote = 1;
+#ifdef ARGV_KEEP_QUOTES
+			  *arg++ = *input;
+#endif
 			}
 		      else
 			{

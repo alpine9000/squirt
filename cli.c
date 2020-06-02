@@ -285,7 +285,6 @@ cli_hostCommand(const char* hostname, int argc, char** argv)
     }
   }
 
-
   char** newArgv = malloc(sizeof(char*)*(argc+1));
 
   for (int i = 0; i < argc; i++) {
