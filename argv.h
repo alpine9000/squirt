@@ -1,13 +1,15 @@
 #pragma once
 
+#define ARGV_KEEP_QUOTES
+
 char **
 argv_build (char* input);
 
-void 
+void
 argv_free (char **vector);
 
-int 
+int
 argv_argc(char** vector);
 
-char* 
+char*
 argv_reconstruct(char** vector);

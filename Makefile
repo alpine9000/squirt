@@ -10,7 +10,7 @@ STATIC_ANALYZE=-fanalyzer
 endif
 
 SQUIRTD_SRCS=squirtd.c
-SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c squirt_cli.c squirt_cwd.c util.c argv.c
+SQUIRT_SRCS=squirt.c squirt_exec.c squirt_suck.c squirt_dir.c squirt_main.c squirt_cli.c squirt_cwd.c srl.c util.c argv.c
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd
 
 VBCC_CC=vc

@@ -28,6 +28,8 @@ Boston, MA 02110-1301, USA.  */
 #include <stdlib.h>
 #include <string.h>
 
+#include "argv.h"
+
 #define INITIAL_MAXARGC 8
 #define MAX_ARGC 32768
 
@@ -125,6 +127,9 @@ char **argv_build (char* input)
 		  else if (*input == '\\')
 		    {
 		      bsquote = 1;
+#ifdef ARGV_KEEP_QUOTES
+		      *arg++ = *input;
+#endif
 		    }
 		  else if (squote)
 		    {
@@ -133,7 +138,7 @@ char **argv_build (char* input)
 			  squote = 0;
 			}
 		      else
-			{
+		      	{
 			  *arg++ = *input;
 			}
 		    }
@@ -143,10 +148,14 @@ char **argv_build (char* input)
 			{
 			  dquote = 0;
 			}
+#ifdef ARGV_KEEP_QUOTES
+		      *arg++ = *input;
+#else
 		      else
 			{
 			  *arg++ = *input;
 			}
+#endif
 		    }
 		  else
 		    {

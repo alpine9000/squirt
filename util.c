@@ -17,6 +17,7 @@
 
 #include "squirt.h"
 #include "common.h"
+#include "argv.h"
 
 static const char* errors[] = {
   [_ERROR_SUCCESS] = "Unknown error",
@@ -430,4 +431,30 @@ util_isDirectory(const char *path)
   return S_ISDIR(statbuf.st_mode);
 #endif
 
+}
+
+
+int
+util_system(char** argv)
+{
+  int argc = argv_argc(argv);
+  int commandLength = 0;
+  for (int i = 0; i < argc; i++) {
+    if (i > 0) {
+      commandLength++;
+    }
+    commandLength += (strlen(argv[i])+2);
+  }
+  commandLength++;
+
+  char* command = malloc(commandLength);
+  command[0] = 0;
+  for (int i = 0; i < argc; i++) {
+    if (i > 0) {
+      strcat(command, " ");
+    }
+    strcat(command, argv[i]);
+  }
+
+  return system(command);
 }

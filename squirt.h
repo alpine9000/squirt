@@ -135,3 +135,24 @@ util_getTempFolder(void);
 
 int
 util_isDirectory(const char *path);
+
+int
+util_system(char** argv);
+
+const char*
+squirt_prompt(void);
+
+void
+srl_init(void (*complete_hook)(const char* text), char* (*generator)(int* list_index, const char* text, int len));
+
+void
+srl_write_history(void);
+
+void
+srl_cleanup(void);
+
+char *
+srl_gets(void);
+
+char *
+srl_generator(const char *text, int state);
