@@ -12,8 +12,9 @@
 #include <sys/ioctl.h>
 #endif
 
-const char* squirt_argv0;
-int squirt_screenWidth = 0;
+const char* main_argv0;
+int main_screenWidth = 0;
+
 
 _Noreturn void
 main_cleanupAndExit(int errorCode)
@@ -35,24 +36,25 @@ main_fatalError(const char *format, ...)
 {
   va_list args;
   va_start(args, format);
-  fprintf(stderr, "%s: ", squirt_argv0);
+  fprintf(stderr, "%s: ", main_argv0);
   vfprintf(stderr, format, args);
   va_end(args);
   fprintf(stderr, "\n");
   main_cleanupAndExit(EXIT_FAILURE);
 }
 
+
 int main(int argc, char* argv[])
 {
-  squirt_argv0 = argv[0];
+  main_argv0 = argv[0];
 
   setlocale(LC_NUMERIC, "");
 
-  squirt_screenWidth = 80;
+  main_screenWidth = 80;
 #ifndef _WIN32
   struct winsize ws;
   if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) != -1) {
-    squirt_screenWidth = ws.ws_col;
+    main_screenWidth = ws.ws_col;
   }
 #else
   WSADATA wsaData;
@@ -60,28 +62,20 @@ int main(int argc, char* argv[])
 #endif
 
   if (strstr(basename(argv[0]), "squirt_suck")) {
-    return suck_main(argc, argv);
+    suck_main(argc, argv);
+  } else  if (strstr(basename(argv[0]), "squirt_exec")) {
+    exec_main(argc, argv);
+  } else if (strstr(basename(argv[0]), "squirt_cli")) {
+    cli_main(argc, argv);
+  } else if (strstr(basename(argv[0]), "squirt_dir")) {
+    dir_main(argc, argv);
+  } else if (strstr(basename(argv[0]), "squirt_backup")) {
+    backup_main(argc, argv);
+  } else if (strstr(basename(argv[0]), "squirt_cwd")) {
+    cwd_main(argc, argv);
+  } else {
+    squirt_main(argc, argv);
   }
 
-  if (strstr(basename(argv[0]), "squirt_exec")) {
-    return exec_main(argc, argv);
-  }
-
-  if (strstr(basename(argv[0]), "squirt_cli")) {
-    return cli_main(argc, argv);
-  }
-
-  if (strstr(basename(argv[0]), "squirt_dir")) {
-    return dir_main(argc, argv);
-  }
-
-  if (strstr(basename(argv[0]), "squirt_backup")) {
-    return backup_main(argc, argv);
-  }
-
-  if (strstr(basename(argv[0]), "squirt_cwd")) {
-    return cwd_main(argc, argv);
-  }
-
-  return squirt_main(argc, argv);
+  main_cleanupAndExit(EXIT_SUCCESS);
 }

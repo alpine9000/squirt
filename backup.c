@@ -436,7 +436,7 @@ squirt_loadSkipFile(const char* filename)
 
 
 
-int
+void
 backup_main(int argc, char* argv[])
 {
   backup_skipFile = 0;
@@ -445,12 +445,12 @@ backup_main(int argc, char* argv[])
   char* path;
 
   if (argc < 3) {
-    fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", main_argv0);
   }
 
   if (argc == 4) {
     if (strstr(argv[1], "--skipfile=") == 0) {
-      fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", squirt_argv0);
+      fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", main_argv0);
     }
     hostname = argv[2];
     path = argv[3];
@@ -496,6 +496,4 @@ backup_main(int argc, char* argv[])
 
 
   printf("\nbackup complete!\n");
-
-  main_cleanupAndExit(EXIT_SUCCESS);
 }

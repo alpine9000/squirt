@@ -203,22 +203,24 @@ cli_freeHostFile(cli_hostfile_t* file)
 {
   if (file) {
     if (file->localFilename) {
+      unlink(file->localFilename);
       free(file->localFilename);
     }
     if (file->backupFilename) {
+      unlink(file->backupFilename);
       free(file->backupFilename);
     }
     free(file);
   }
 }
 
+
 static cli_hostfile_t*
 cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* remote)
 {
   cli_hostfile_t *file = calloc(1, sizeof(cli_hostfile_t));
   char* local = strdup(remote);
-  cli_replaceChar(local, '/', '_');
-  cli_replaceChar(local, ':', '_');
+  cli_replaceChar(local, ':', '/');
 
   const char *tempPath = util_getTempFolder();
   int localFilenameLength = strlen(remote) + strlen(tempPath) + 1;
@@ -226,7 +228,7 @@ cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* r
   file->localFilename = malloc(localFilenameLength);
   snprintf(file->localFilename, localFilenameLength, "%s%s", tempPath, local);
   free(local);
-  util_mkdir(tempPath, 0777);
+  util_mkpath(file->localFilename);
 
   int error = squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename);
   if (error == -ERROR_SUCK_ON_DIR) {
@@ -307,6 +309,8 @@ cli_hostCommand(const char* hostname, int argc, char** argv)
       cli_freeHostFile(save);
     }
   }
+
+  util_rmdir(util_getTempFolder());
 
   return success;
 }
@@ -407,7 +411,7 @@ cli_completeHook(const char* text)
 }
 
 
-int
+void
 cli_main(int argc, char* argv[])
 {
   (void)argc,(void)argv;
@@ -416,7 +420,7 @@ cli_main(int argc, char* argv[])
   cli_readLineBase = 0;
 
   if (argc != 2) {
-    fatalError("incorrect number of arguments\nusage: %s hostname", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname", main_argv0);
   }
 
   cli_hostname = argv[1];
@@ -438,7 +442,4 @@ cli_main(int argc, char* argv[])
       cli_runCommand(argv[1], command);
     }
   } while (1);
-
-  exit(EXIT_SUCCESS);
-  return 0;
 }

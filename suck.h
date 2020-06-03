@@ -7,5 +7,5 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 void
 suck_cleanup(void);
 
-int
+void
 suck_main(int argc, char* argv[]);

@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 
 #ifndef _WIN32
+#include <ftw.h>
 #include <pwd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -98,6 +99,78 @@ util_connect(const char* hostname, uint32_t commandCode)
   return socketFd;
 }
 
+int
+util_mkpath(const char *dir)
+{
+  int error = 0;
+  char tmp[PATH_MAX];
+  char *p = NULL;
+  size_t len;
+  int makeLast = 0;
+
+  snprintf(tmp, sizeof(tmp),"%s",dir);
+
+  len = strlen(tmp);
+
+  if (tmp[len - 1] == '/') {
+    makeLast = 1;
+    tmp[len - 1] = 0;
+  }
+
+  for (p = tmp + 1; *p; p++) {
+    if (*p == '/') {
+      *p = 0;
+      util_mkdir(tmp, S_IRWXU);
+      *p = '/';
+    }
+  }
+
+  if (makeLast) {
+    util_mkdir(tmp, S_IRWXU);
+  }
+
+  return error;
+}
+
+#ifndef _WIN32
+static int
+_util_nftwRmFiles(const char *pathname, const struct stat *sbuf, int type, struct FTW *ftwb)
+{
+  (void)sbuf,(void)type,(void)ftwb;
+
+  return remove(pathname);
+}
+
+int
+util_rmdir(const char *dir)
+{
+  int error = 0;
+
+  if (nftw(dir, _util_nftwRmFiles,10, FTW_DEPTH|FTW_MOUNT|FTW_PHYS) < 0) {
+    error = -1;
+  }
+
+  return error;
+}
+
+#else
+int
+util_rmdir(const char* path)
+{
+  char* doubleTerminatedPath = malloc(strlen(path)+3);
+  memset(doubleTerminatedPath, 0, strlen(path)+3);
+  strcpy(doubleTerminatedPath, path);
+
+  SHFILEOPSTRUCT fileOperation;
+  fileOperation.wFunc = FO_DELETE;
+  fileOperation.pFrom = doubleTerminatedPath;
+  fileOperation.fFlags = FOF_NO_UI | FOF_NOCONFIRMATION;
+
+  return SHFileOperation(&fileOperation);
+
+}
+
+#endif
 
 int
 util_mkdir(const char *path, uint32_t mode)
@@ -206,7 +279,7 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
     percentage = 100;
   }
 
-  int barWidth = squirt_screenWidth - 20;
+  int barWidth = main_screenWidth - 20;
   int screenPercentage = (percentage*barWidth)/100;
   struct timeval current;
 
@@ -404,13 +477,14 @@ util_strlcat(char * restrict dst, const char * restrict src, size_t maxlen)
 const char*
 util_getTempFolder(void)
 {
+  static char path[PATH_MAX];
 #ifndef _WIN32
-  return "/tmp/.squirt/";
+  snprintf(path, sizeof(path), "/tmp/.squirt/%d/", getpid());
+  return path;
 #else
   char buffer[PATH_MAX];
-  static char path[PATH_MAX];
   GetTempPathA(PATH_MAX, buffer);
-  snprintf(path, sizeof(path), "%s.squirt/", buffer);
+  snprintf(path, sizeof(path), "%s.squirt/%d/", buffer, getpid());
   return path;
 #endif
 }

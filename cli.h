@@ -1,6 +1,6 @@
 #pragma once
 
-int
+void
 cli_main(int argc, char* argv[]);
 
 void

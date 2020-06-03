@@ -113,6 +113,7 @@ dir_freeEntryLists(void)
   dir_entryLists = 0;
 }
 
+
 void
 dir_freeEntryList(dir_entry_list_t* list)
 {
@@ -339,18 +340,14 @@ dir_process(const char* hostname, const char* command, void(*process)(const char
 }
 
 
-int
+void
 dir_main(int argc, char* argv[])
 {
-  squirt_argv0 = argv[0];
-
   if (argc != 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname dir_name", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname dir_name", main_argv0);
   }
 
   if (dir_process(argv[1], argv[2], squirt_dirPrintEntryList) != 0) {
     fatalError("unable to read %s", argv[2]);
   }
-
-  main_cleanupAndExit(EXIT_SUCCESS);
 }

@@ -111,7 +111,8 @@ exec_cmd(const char* hostname, int argc, char** argv)
   return error;
 }
 
-int
+
+void
 exec_main(int argc, char* argv[])
 {
   if (argc < 3) {
@@ -131,8 +132,4 @@ exec_main(int argc, char* argv[])
   if (error != 0) {
     fatalError("%s", util_getErrorString(error));
   }
-
-  main_cleanupAndExit(EXIT_SUCCESS);
-
-  return 0;
 }

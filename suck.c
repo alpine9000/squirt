@@ -89,7 +89,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
       }
       if ((len = util_recv(suck_socketFd, suck_readBuffer, requestLength, 0)) < 0) {
 	fflush(stdout);
-	fatalError("\n%s failed to read", squirt_argv0);
+	fatalError("\nfailed to read");
       } else {
 	if (progress) {
 	  util_printProgress(&suck_start, total, fileLength);
@@ -97,7 +97,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 	int readLen;
 	if ((readLen = write(suck_fileFd, suck_readBuffer, len)) != len) {
 	  fflush(stdout);
-	  fatalError("\nailed to write to %s %d",  baseName, readLen);
+	  fatalError("\nfailed to write to %s %d",  baseName, readLen);
 	}
 	total += len;
       }
@@ -130,11 +130,11 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 }
 
 
-int
+void
 suck_main(int argc, char* argv[])
 {
   if (argc != 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
   int32_t length = squirt_suckFile(argv[1], argv[2], 1, 0);
@@ -152,8 +152,4 @@ suck_main(int argc, char* argv[])
   printf("\nsucked %s -> %s (%s bytes) in %0.02f seconds ", argv[2], baseName, util_formatNumber(length), ((double)micros)/1000000.0f);
   util_printFormatSpeed(length, ((double)micros)/1000000.0f);
   printf("\n");
-
-  main_cleanupAndExit(EXIT_SUCCESS);
-
-  return 0;
 }

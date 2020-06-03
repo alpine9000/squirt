@@ -16,6 +16,12 @@ const char*
 util_getHistoryFile(void);
 
 int
+util_mkpath(const char *dir);
+
+int
+util_rmdir(const char *dir);
+
+int
 util_mkdir(const char *path, uint32_t mode);
 
 int

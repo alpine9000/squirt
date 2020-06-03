@@ -130,16 +130,12 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 }
 
 
-int
+void
 squirt_main(int argc, char* argv[])
 {
   if (argc != 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname filename", squirt_argv0);
+    fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
   squirt_file(argv[1], argv[2], 0, 0, 1);
-
-  main_cleanupAndExit(EXIT_SUCCESS);
-
-  return 0;
 }

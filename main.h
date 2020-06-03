@@ -21,8 +21,8 @@
 #endif
 
 
-extern const char* squirt_argv0;
-extern int squirt_screenWidth;
+extern const char* main_argv0;
+extern int main_screenWidth;
 
 
 void

@@ -43,5 +43,5 @@ dir_read(const char* hostname, const char* command);
 int
 dir_process(const char* hostname, const char* command, void(*process)(const char* hostname, dir_entry_list_t*));
 
-int
+void
 dir_main(int argc, char* argv[]);

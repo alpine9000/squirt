@@ -51,7 +51,7 @@ cwd_read(const char* hostname)
 }
 
 
-int
+void
 cwd_main(int argc, char* argv[])
 {
   if (argc < 2) {
@@ -70,7 +70,4 @@ cwd_main(int argc, char* argv[])
 
   free((void*)cwd);
 
-  main_cleanupAndExit(EXIT_SUCCESS);
-
-  return 0;
 }
