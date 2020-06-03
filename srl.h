@@ -11,6 +11,3 @@ srl_cleanup(void);
 
 char *
 srl_gets(void);
-
-char *
-srl_generator(const char *text, int state);

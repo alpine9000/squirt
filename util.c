@@ -99,6 +99,7 @@ util_connect(const char* hostname, uint32_t commandCode)
   return socketFd;
 }
 
+
 int
 util_mkpath(const char *dir)
 {
@@ -132,6 +133,7 @@ util_mkpath(const char *dir)
   return error;
 }
 
+
 #ifndef _WIN32
 static int
 _util_nftwRmFiles(const char *pathname, const struct stat *sbuf, int type, struct FTW *ftwb)
@@ -140,6 +142,7 @@ _util_nftwRmFiles(const char *pathname, const struct stat *sbuf, int type, struc
 
   return remove(pathname);
 }
+
 
 int
 util_rmdir(const char *dir)
@@ -152,7 +155,6 @@ util_rmdir(const char *dir)
 
   return error;
 }
-
 #else
 int
 util_rmdir(const char* path)
@@ -169,8 +171,8 @@ util_rmdir(const char* path)
   return SHFileOperation(&fileOperation);
 
 }
-
 #endif
+
 
 int
 util_mkdir(const char *path, uint32_t mode)
@@ -447,6 +449,7 @@ util_signalHandler(int signal)
 }
 #endif
 
+
 void
 util_onCtrlC(void (*handler)(void))
 {
@@ -531,5 +534,7 @@ util_system(char** argv)
     strcat(command, argv[i]);
   }
 
-  return system(command);
+  int error = system(command);
+  free(command);
+  return error;
 }

@@ -11,7 +11,7 @@ static const char* (*_srl_prompt)(void);
 static void (*_srl_complete_hook)(const char* text);
 static char* (*_srl_generator)(int* list_index, const char* text, int len);
 
-char *
+static char *
 srl_generator(const char *text, int state)
 {
   static int list_index, len;
@@ -135,7 +135,11 @@ srl_quote_func(char * text, int state, char* blah)
 static int
 srl_directory_rewrite(char** name)
 {
+  char* backup = *name;
   *name = srl_dequote_func(*name, 0);
+  if (backup) {
+    free(backup);
+  }
   return 1;
 }
 

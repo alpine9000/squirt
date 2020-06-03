@@ -22,11 +22,11 @@ typedef struct hostfile {
   struct hostfile* next;
 } cli_hostfile_t;
 
-
 static const char* cli_hostname = 0;
 static char* cli_currentDir = 0;
 static dir_entry_list_t *cli_dirEntryList = 0;
 static char* cli_readLineBase = 0;
+
 
 void
 cli_cleanup(void)
@@ -60,7 +60,7 @@ cli_changeDir(const char* dir)
 }
 
 
-const char*
+static const char*
 cli_prompt(void)
 {
   static char buffer[256];

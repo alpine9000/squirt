@@ -47,7 +47,7 @@ backup_cleanup()
 
 
 static char*
-scanString(FILE* fp)
+_scanString(FILE* fp)
 {
   char buffer[108] = {0};
   int c = fscanf(fp, "%*[^:]:%107[^\n]%*c", buffer);
@@ -62,7 +62,7 @@ scanString(FILE* fp)
 
 
 static int
-scanInt(FILE* fp)
+_scanInt(FILE* fp)
 {
   int number = 0;
   if (fscanf(fp, "%*[^:]:%d%*c", &number) == 1) {
@@ -74,7 +74,7 @@ scanInt(FILE* fp)
 
 
 static char*
-scanComment(FILE* fp)
+_scanComment(FILE* fp)
 {
   char buffer[128] = {0};
   char* ptr = buffer;
@@ -104,7 +104,7 @@ scanComment(FILE* fp)
 
 
 static int
-readExAllData(dir_entry_t* entry, const char* path)
+backup_readExAllData(dir_entry_t* entry, const char* path)
 {
   if (!entry) {
     fatalError("readExAllData called with null entry");
@@ -119,14 +119,14 @@ readExAllData(dir_entry_t* entry, const char* path)
     free(name);
     return 0;
   }
-  entry->name = scanString(fp);
-  entry->type = scanInt(fp);
-  entry->size = scanInt(fp);
-  entry->prot = scanInt(fp);
-  entry->days = scanInt(fp);
-  entry->mins = scanInt(fp);
-  entry->ticks = scanInt(fp);
-  entry->comment = scanComment(fp);
+  entry->name = _scanString(fp);
+  entry->type = _scanInt(fp);
+  entry->size = _scanInt(fp);
+  entry->prot = _scanInt(fp);
+  entry->days = _scanInt(fp);
+  entry->mins = _scanInt(fp);
+  entry->ticks = _scanInt(fp);
+  entry->comment = _scanComment(fp);
 
   fclose(fp);
   free(name);
@@ -136,7 +136,7 @@ readExAllData(dir_entry_t* entry, const char* path)
 
 
 static int
-saveExAllData(dir_entry_t* entry, const char* path)
+backup_saveExAllData(dir_entry_t* entry, const char* path)
 {
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
@@ -170,7 +170,7 @@ saveExAllData(dir_entry_t* entry, const char* path)
 
 
 static int
-identicalExAllData(dir_entry_t* one, dir_entry_t* two)
+backup_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 {
   int identical =
     one->name != NULL && two->name != NULL &&
@@ -206,8 +206,9 @@ identicalExAllData(dir_entry_t* one, dir_entry_t* two)
   return identical;
 }
 
+
 static char*
-fullPath(const char* name)
+backup_fullPath(const char* name)
 {
   char* path = malloc(strlen(backup_currentDir) + strlen(name) + 2);
   if (!path) {
@@ -221,14 +222,15 @@ fullPath(const char* name)
   return path;
 }
 
+
 static void
-backupList(const char* hostname, dir_entry_list_t* list)
+backup_backupList(const char* hostname, dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
 
   while (entry) {
     if (entry->type < 0) {
-      const char* path = fullPath(entry->name);
+      const char* path = backup_fullPath(entry->name);
       int skipFile = 0;
       if (backup_skipFile) {
 	char* found = strstr(backup_skipFile, path);
@@ -243,9 +245,9 @@ backupList(const char* hostname, dir_entry_list_t* list)
 	struct stat st;
 	if (stat(util_amigaBaseName(path), &st) == 0) {
 	  if (st.st_size == (off_t)entry->size) {
-	    skip = readExAllData(temp, path);
+	    skip = backup_readExAllData(temp, path);
 	    if (skip) {
-	      skip = identicalExAllData(temp, entry);
+	      skip = backup_identicalExAllData(temp, entry);
 	    }
 	  }
 	}
@@ -262,7 +264,7 @@ backupList(const char* hostname, dir_entry_list_t* list)
 	if (squirt_suckFile(hostname, path, 1, 0) < 0) {
 	  fatalError("failed to backup %s", path);
 	}
-	saveExAllData(entry, path);
+	backup_saveExAllData(entry, path);
 	printf("\n");
 	fflush(stdout);
       }
@@ -274,7 +276,7 @@ backupList(const char* hostname, dir_entry_list_t* list)
   entry = list->head;
   while (entry) {
     if (entry->type > 0) {
-      const char* path = fullPath(entry->name);
+      const char* path = backup_fullPath(entry->name);
       int skipFile = 0;
       if (backup_skipFile) {
 	char* found = strstr(backup_skipFile, path);
@@ -284,7 +286,7 @@ backupList(const char* hostname, dir_entry_list_t* list)
 	}
       }
       if (!skipFile) {
-	saveExAllData(entry, path);
+	backup_saveExAllData(entry, path);
 	free((void*)path);
 	backup_backupDir(hostname, entry->name);
       } else {
@@ -321,7 +323,7 @@ backup_cd(const char* hostname, const char* dir)
 
 
 static char*
-safeName(const char* name)
+backup_safeName(const char* name)
 {
   char* safe = malloc(strlen(name)+1);
   char* dest = safe;
@@ -342,10 +344,10 @@ safeName(const char* name)
 
 
 static char*
-pushDir(const char* hostname, const char* dir)
+backup_pushDir(const char* hostname, const char* dir)
 {
   if (backup_currentDir) {
-    char* newDir = fullPath(dir);
+    char* newDir = backup_fullPath(dir);
     if (backup_currentDir) {
       free(backup_currentDir);
     }
@@ -359,7 +361,7 @@ pushDir(const char* hostname, const char* dir)
     fatalError("unable to backup %s", backup_currentDir);
   }
 
-  char* safe = safeName(dir);
+  char* safe = backup_safeName(dir);
   if (!safe) {
     fatalError("failed to create safe name");
   }
@@ -381,8 +383,9 @@ pushDir(const char* hostname, const char* dir)
   return cwd;
 }
 
+
 static void
-popDir(char* cwd)
+backup_popDir(char* cwd)
 {
   for (int i = strlen(backup_currentDir)-1; i >= 0; --i) {
     if (backup_currentDir[i] == '/' || (i > 0 && backup_currentDir[i-1] == ':')) {
@@ -401,16 +404,17 @@ popDir(char* cwd)
 static void
 backup_backupDir(const char* hostname, const char* dir)
 {
-  char* cwd = pushDir(hostname, dir);
+  char* cwd = backup_pushDir(hostname, dir);
   printf("%s/ \xE2\x9C\x93\n", backup_currentDir);
-  if (dir_process(hostname, backup_currentDir, backupList) != 0) {
+  if (dir_process(hostname, backup_currentDir, backup_backupList) != 0) {
     fatalError("unable to read %s", dir);
   }
-  popDir(cwd);
+  backup_popDir(cwd);
 }
 
+
 static void
-squirt_loadSkipFile(const char* filename)
+backup_loadSkipFile(const char* filename)
 {
   struct stat st;
 
@@ -454,7 +458,7 @@ backup_main(int argc, char* argv[])
     }
     hostname = argv[2];
     path = argv[3];
-    squirt_loadSkipFile(strstr(argv[1], "=")+1);
+    backup_loadSkipFile(strstr(argv[1], "=")+1);
   } else {
     hostname = argv[1];
     path = argv[2];
@@ -472,12 +476,12 @@ backup_main(int argc, char* argv[])
 	fatalError("malloc failed");
       }
       sprintf(backup_dirBuffer, "%s:", dir);
-      free(pushDir(hostname, backup_dirBuffer));
+      free(backup_pushDir(hostname, backup_dirBuffer));
       do {
 	dir = token;
 	token = strtok(0, "/");
 	if (token) {
-	  free(pushDir(hostname, dir));
+	  free(backup_pushDir(hostname, dir));
 	}
       } while (token);
     } else {

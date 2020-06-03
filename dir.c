@@ -147,7 +147,7 @@ dir_freeEntryList(dir_entry_list_t* list)
 
 
 static void
-printProtectFlags(dir_entry_t* entry)
+dir_printProtectFlags(dir_entry_t* entry)
 {
   char bits[] = {'d', 'e', 'w', 'r', 'a', 'p', 's', 'h'};
   uint32_t prot = (entry->prot ^ 0xF) & 0xFF;
@@ -162,7 +162,7 @@ printProtectFlags(dir_entry_t* entry)
 
 
 static char*
-formatDateTime(dir_entry_t* entry)
+dir_formatDateTime(dir_entry_t* entry)
 {
   struct timeval tv;
   time_t nowtime;
@@ -179,8 +179,7 @@ formatDateTime(dir_entry_t* entry)
 }
 
 
-//static
-void
+static void
 squirt_dirPrintEntryList(const char* hostname, dir_entry_list_t* list)
 {
   (void)hostname;
@@ -200,13 +199,13 @@ squirt_dirPrintEntryList(const char* hostname, dir_entry_list_t* list)
 
   entry = list->head;
   while (entry) {
-    printProtectFlags(entry);
+    dir_printProtectFlags(entry);
 
     for (int i = 0; i < maxSizeLength-entry->renderedSizeLength + 3; i++) {
       putchar(' ');
     }
 
-    if (printf("%s %s %s%c", util_formatNumber(entry->size), formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
+    if (printf("%s %s %s%c", util_formatNumber(entry->size), dir_formatDateTime(entry), entry->name, entry->type > 0 ? '/' : ' ') < 0) {
       perror("printf");
     }
     if (entry->comment) {
@@ -219,7 +218,7 @@ squirt_dirPrintEntryList(const char* hostname, dir_entry_list_t* list)
 
 
 static uint32_t
-getDirEntry(dir_entry_list_t* entryList)
+dir_getDirEntry(dir_entry_list_t* entryList)
 {
   uint32_t nameLength;
 
@@ -301,7 +300,7 @@ dir_read(const char* hostname, const char* command)
   uint32_t more;
   dir_entry_list_t *entryList = dir_newEntryList();
   do {
-    more = getDirEntry(entryList);
+    more = dir_getDirEntry(entryList);
   } while (more);
 
   uint32_t error;
