@@ -6,10 +6,12 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <utime.h>
 #include <sys/stat.h>
 
 #include "main.h"
 #include "common.h"
+
 
 static void
 backup_backupDir(const char* hostname, const char* dir);
@@ -134,6 +136,25 @@ backup_readExAllData(dir_entry_t* entry, const char* path)
   return 1;
 }
 
+static char*
+backup_fullPath(const char* name)
+{
+  if (!backup_currentDir) {
+    return strdup(name);
+  }
+
+  char* path = malloc(strlen(backup_currentDir) + strlen(name) + 2);
+  if (!path) {
+    return NULL;
+  }
+  if (backup_currentDir[strlen(backup_currentDir)-1] != ':') {
+    sprintf(path, "%s/%s", backup_currentDir, name);
+  } else {
+    sprintf(path, "%s%s", backup_currentDir, name);
+  }
+  return path;
+}
+
 
 static int
 backup_saveExAllData(dir_entry_t* entry, const char* path)
@@ -148,6 +169,29 @@ backup_saveExAllData(dir_entry_t* entry, const char* path)
   if (!fp) {
     free(name);
     return 0;
+  }
+
+
+  struct timeval tv ;
+  int sec = entry->ticks / 50;
+  tv.tv_sec = (DIR_AMIGA_EPOC_ADJUSTMENT_DAYS*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
+  tv.tv_usec = (entry->ticks - (sec * 50)) * 200;
+  time_t _time = tv.tv_sec;
+
+  struct tm *tm = gmtime(&_time);
+  struct utimbuf ut;
+
+  struct stat st;
+
+  if (stat(baseName, &st) != 0) {
+    fatalError("failed to get file attributes of %s %s\n", baseName, backup_fullPath(entry->name));
+  }
+
+  ut.actime = st.st_atime;
+  ut.modtime = mktime(tm);
+
+  if (utime(baseName, &ut) != 0) {
+    fatalError("failed to set file attributes of %s\n", baseName);
   }
 
   fprintf(fp, "name:%s\n", entry->name);
@@ -207,20 +251,6 @@ backup_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 }
 
 
-static char*
-backup_fullPath(const char* name)
-{
-  char* path = malloc(strlen(backup_currentDir) + strlen(name) + 2);
-  if (!path) {
-    return NULL;
-  }
-  if (backup_currentDir[strlen(backup_currentDir)-1] != ':') {
-    sprintf(path, "%s/%s", backup_currentDir, name);
-  } else {
-    sprintf(path, "%s%s", backup_currentDir, name);
-  }
-  return path;
-}
 
 
 static void
@@ -286,9 +316,9 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	}
       }
       if (!skipFile) {
+	backup_backupDir(hostname, entry->name);
 	backup_saveExAllData(entry, path);
 	free((void*)path);
-	backup_backupDir(hostname, entry->name);
       } else {
 	printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
 	free((void*)path);
@@ -409,6 +439,7 @@ backup_backupDir(const char* hostname, const char* dir)
   if (dir_process(hostname, backup_currentDir, backup_backupList) != 0) {
     fatalError("unable to read %s", dir);
   }
+
   backup_popDir(cwd);
 }
 

@@ -161,7 +161,7 @@ dir_printProtectFlags(dir_entry_t* entry)
 }
 
 
-static char*
+char*
 dir_formatDateTime(dir_entry_t* entry)
 {
   struct timeval tv;
@@ -170,7 +170,7 @@ dir_formatDateTime(dir_entry_t* entry)
   static char tmbuf[64];
 
   int sec = entry->ticks / 50;
-  tv.tv_sec = (8*365*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
+  tv.tv_sec = (DIR_AMIGA_EPOC_ADJUSTMENT_DAYS*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
   tv.tv_usec = (entry->ticks - (sec * 50)) * 200;
   nowtime = tv.tv_sec;
   nowtm = gmtime(&nowtime);

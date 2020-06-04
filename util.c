@@ -182,6 +182,11 @@ int
 util_mkdir(const char *path, uint32_t mode)
 {
 #ifndef _WIN32
+  struct stat st;
+  if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+    return 0;
+  }
+
   return mkdir(path, mode);
 #else
   (void)mode;

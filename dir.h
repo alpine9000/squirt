@@ -1,6 +1,8 @@
 #pragma once
 #include <stdint.h>
 
+#define DIR_AMIGA_EPOC_ADJUSTMENT_DAYS 2922
+
 typedef struct direntry {
   const char* name;
   int32_t type;
@@ -42,6 +44,9 @@ dir_read(const char* hostname, const char* command);
 
 int
 dir_process(const char* hostname, const char* command, void(*process)(const char* hostname, dir_entry_list_t*));
+
+char*
+dir_formatDateTime(dir_entry_t* entry);
 
 void
 dir_main(int argc, char* argv[]);
