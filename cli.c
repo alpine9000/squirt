@@ -32,6 +32,8 @@ static char* cli_readLineBase = 0;
 void
 cli_cleanup(void)
 {
+  srl_write_history();
+
   if (cli_readLineBase) {
     free(cli_readLineBase);
     cli_readLineBase = 0;
@@ -354,7 +356,6 @@ cli_runCommand(const char* hostname, char* line)
 static void
 cli_onExit(void)
 {
-  srl_write_history();
   main_cleanupAndExit(EXIT_SUCCESS);
 }
 
@@ -439,7 +440,6 @@ cli_main(int argc, char* argv[])
     free((void*)cwd);
     char* command = srl_gets();
     if (command && strlen(command)) {
-      add_history(command);
       cli_runCommand(argv[1], command);
     }
   } while (1);
