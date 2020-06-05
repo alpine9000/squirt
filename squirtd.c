@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dos/dostags.h>
+#include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/socket.h>
 #include <proto/dos.h>
@@ -20,6 +21,7 @@
 #endif
 
 static uint32_t squirtd_error = 0;
+static uint32_t squirtd_protection = 0;
 static int squirtd_listenFd = 0;
 static int squirtd_connectionFd = 0;
 static char* squirtd_filename = 0;
@@ -60,15 +62,19 @@ cleanupForNextRun(void)
     squirtd_rxBuffer = 0;
   }
 
+  if (squirtd_outputFd > 0) {
+    Close(squirtd_outputFd);
+    squirtd_outputFd = 0;
+    if (squirtd_protection) {
+      SetProtection((STRPTR)squirtd_filename, squirtd_protection);
+    }
+  }
+
   if (squirtd_filename) {
     free(squirtd_filename);
     squirtd_filename = 0;
   }
 
-  if (squirtd_outputFd > 0) {
-    Close(squirtd_outputFd);
-    squirtd_outputFd = 0;
-  }
 }
 
 
@@ -285,6 +291,7 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
   int fullPathLen = nameLength+destFolderLen;
   squirtd_filename = malloc(fullPathLen+1);
   char* filenamePtr;
+  squirtd_protection = 0;
 
   if (writeToCwd) {
     filenamePtr = squirtd_filename;
@@ -301,7 +308,10 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
   squirtd_filename[fullPathLen] = 0;
 
   int32_t fileLength;
-  if (recv(fd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
+  // error not checked to keep exe under 5kb, the next recv will pick up the same error
+  recv(fd, (void*)&fileLength, sizeof(fileLength), 0);
+
+  if (recv(fd, (void*)&squirtd_protection, sizeof(squirtd_protection), 0) != sizeof(squirtd_protection)) {
     return  ERROR_RECV_FAILED;
   }
 
@@ -363,6 +373,10 @@ file_send(int fd, char* filename)
 
   if (fileSize == 0) {
     return 0;
+  }
+
+  if (send(fd, (void*)&fileInfo.fib_Protection, sizeof(fileInfo.fib_Protection), 0) != sizeof(fileSize)) {
+    return ERROR_SEND_FAILED;
   }
 
   squirtd_inputFd = Open((APTR)squirtd_filename, MODE_OLDFILE);

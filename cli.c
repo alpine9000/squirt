@@ -20,6 +20,7 @@ typedef struct hostfile {
   char** argv;
   char* remoteFilename;
   struct hostfile* next;
+  uint32_t remoteProtection;
 } cli_hostfile_t;
 
 static const char* cli_hostname = 0;
@@ -230,7 +231,7 @@ cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* r
   free(local);
   util_mkpath(file->localFilename);
 
-  int error = squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename);
+  int error = squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename, &file->remoteProtection);
   if (error == -ERROR_SUCK_ON_DIR) {
     fprintf(stderr, "error: failed to access remote directory %s\n", file->remoteFilename);
     free(file);
@@ -260,7 +261,7 @@ cli_saveFileIfModified(const char* hostname, cli_hostfile_t* file)
 {
   int success = 0;
   if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
-    success = squirt_file(hostname, file->localFilename, file->remoteFilename, 1, 0) == 0;
+    success = squirt_file(hostname, file->localFilename, file->remoteFilename, file->remoteProtection, 1, 0) == 0;
   }
 
   return success;
@@ -335,7 +336,7 @@ cli_runCommand(const char* hostname, char* line)
       cli_changeDir(argv[1]);
       code = 1;
     } else {
-      printf("cd: %s failed\n", argv[1]);
+      fprintf(stderr, "cd: %s failed\n", argv[1]);
       code = 0;
     }
   } else if (argv[0][0] == '!') {
@@ -377,8 +378,8 @@ cli_completeGenerator(int* list_index, const char* text, int len)
     dir_entry_t* entry = ptr;
     ptr = ptr->next;
 
-    char buffer[256];
-    snprintf(buffer, 256, "%s%s", cli_readLineBase, entry->name);
+    char buffer[PATH_MAX];
+    snprintf(buffer, sizeof(buffer), "%s%s", cli_readLineBase, entry->name);
 
     if (strncmp(buffer, text, len) == 0) {
       rl_completion_append_character = entry->type > 0 ? '/' : ' ';

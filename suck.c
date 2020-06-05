@@ -35,7 +35,7 @@ suck_cleanup(void)
 
 
 int32_t
-squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename)
+squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename, uint32_t* protection)
 {
   int32_t total = 0;
 
@@ -53,6 +53,10 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
   int32_t fileLength;
   if (util_recv32(suck_socketFd, &fileLength) != 0) {
     fatalError("util_recv() Filelength failed");
+  }
+
+  if (util_recvU32(suck_socketFd, protection) != 0) {
+    fatalError("util_recv() protection failed");
   }
 
   const char* baseName;
@@ -114,7 +118,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
   uint32_t error;
   if (util_recvU32(suck_socketFd, &error) != 0) {
-    fatalError("suck: failed to read remote status");
+    return -1;
   }
 
   if (error) {
@@ -137,7 +141,8 @@ suck_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
-  int32_t length = squirt_suckFile(argv[1], argv[2], 1, 0);
+  uint32_t protection;
+  int32_t length = squirt_suckFile(argv[1], argv[2], 1, 0, &protection);
 
   struct timeval end;
 

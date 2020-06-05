@@ -36,7 +36,7 @@ squirt_cleanup(void)
 
 
 int
-squirt_file(const char* hostname, const char* filename, const char* destFilename, int writeToCurrentDir, int progress)
+squirt_file(const char* hostname, const char* filename, const char* destFilename, uint32_t protection, int writeToCurrentDir, int progress)
 {
   int total = 0;
   int32_t fileLength;
@@ -70,6 +70,9 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
     fatalError("send() fileLength failed");
   }
 
+  if (util_sendU32(squirt_socketFd, protection) != 0) {
+    fatalError("send() protection failed");
+  }
 
   squirt_fileFd = util_open(filename, O_RDONLY|_O_BINARY);
 
@@ -137,5 +140,5 @@ squirt_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
-  squirt_file(argv[1], argv[2], 0, 0, 1);
+  squirt_file(argv[1], argv[2], 0, 0, 0, 1);
 }
