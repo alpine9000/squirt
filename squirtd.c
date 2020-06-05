@@ -371,12 +371,12 @@ file_send(int fd, char* filename)
     return ERROR_SEND_FAILED;
   }
 
-  if (fileSize == 0) {
-    return 0;
-  }
-
   if (send(fd, (void*)&fileInfo.fib_Protection, sizeof(fileInfo.fib_Protection), 0) != sizeof(fileSize)) {
     return ERROR_SEND_FAILED;
+  }
+
+  if (fileSize == 0) {
+    return 0;
   }
 
   squirtd_inputFd = Open((APTR)squirtd_filename, MODE_OLDFILE);
