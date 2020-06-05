@@ -4,7 +4,7 @@
 
 You can:
  * Send (squirt) files
- * Recieve (suck) files
+ * Receive (suck) files
  * Run non interactive commands
  * List directories
  * Perform incremental backups
