@@ -291,7 +291,8 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	  printf("%s \xE2\x9C\x93\n", path);
 	}
       } else {
-	if (squirt_suckFile(hostname, path, 1, 0) < 0) {
+	uint32_t protect;
+	if (squirt_suckFile(hostname, path, 1, 0, &protect) < 0) {
 	  fatalError("failed to backup %s", path);
 	}
 	backup_saveExAllData(entry, path);
