@@ -118,6 +118,7 @@ Click on the image below to see a demo video of the remote shell in action.
     squirt_backup [--prune] [--skipfile=skip_filename] hostname path_to_backup
 
 `prune` remove previously backed up files that have subsequently been deleted on your Amiga.
+
 `skip_filename` is an optional file which includes a list of files or directories that should not be backed up.
 
 
