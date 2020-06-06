@@ -77,31 +77,27 @@ util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)
 }
 
 
-int
-util_connect(const char* hostname, uint32_t commandCode)
+void
+util_connect(const char* hostname)
 {
   struct sockaddr_in sockAddr;
-  int socketFd;
 
-  commandCode = htonl(commandCode);
 
   if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
-    return -1;
+    goto error;
   }
 
-  if ((socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    return -2;
+  if ((main_socketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    goto error;
   }
 
-  if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
-    return -3;
+  if (connect(main_socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
+    goto error;
   }
 
-  if (send(socketFd, (const void*)&commandCode, sizeof(commandCode), 0) != sizeof(commandCode)) {
-    return -4;
-  }
-
-  return socketFd;
+  return;
+ error:
+  fatalError("failed to connect to server %s", hostname);
 }
 
 
@@ -567,4 +563,45 @@ util_system(char** argv)
   int error = system(command);
   free(command);
   return error;
+}
+
+
+int
+util_cd(const char* dir)
+{
+  uint32_t error = 0;
+
+  if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_CD) != 0) {
+    fatalError("failed to connect to squirtd server");
+  }
+
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, dir) != 0) {
+    fatalError("send() command failed");
+  }
+
+  if (util_recvU32(main_socketFd, &error) != 0) {
+    fatalError("cd: failed to read remote status");
+  }
+
+  return error;
+}
+
+
+char*
+util_safeName(const char* name)
+{
+  char* safe = malloc(strlen(name)+1);
+  char* dest = safe;
+  if (dest) {
+    while (*name) {
+      if (*name != ':') {
+	*dest = *name;
+	dest++;
+      }
+      name++;
+    }
+    *dest = 0;
+  }
+
+  return safe;
 }

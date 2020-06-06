@@ -10,7 +10,6 @@
 #include "main.h"
 #include "common.h"
 
-static int squirt_socketFd = 0;
 static int squirt_fileFd = 0;
 static char* squirt_readBuffer = 0;
 
@@ -23,11 +22,6 @@ squirt_cleanup(void)
     squirt_readBuffer = 0;
   }
 
-  if (squirt_socketFd > 0) {
-    close(squirt_socketFd);
-    squirt_socketFd = 0;
-  }
-
   if (squirt_fileFd) {
     close(squirt_fileFd);
     squirt_fileFd = 0;
@@ -36,7 +30,7 @@ squirt_cleanup(void)
 
 
 int
-squirt_file(const char* hostname, const char* filename, const char* destFilename, uint32_t protection, int writeToCurrentDir, int progress)
+squirt_file(const char* filename, const char* destFilename, int writeToCurrentDir, int progress)
 {
   int total = 0;
   int32_t fileLength;
@@ -50,7 +44,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
   fileLength = st.st_size;
 
-  if ((squirt_socketFd = util_connect(hostname, writeToCurrentDir ? SQUIRT_COMMAND_SQUIRT_TO_CWD : SQUIRT_COMMAND_SQUIRT)) < 0) {
+  if (util_sendCommand(main_socketFd, writeToCurrentDir ? SQUIRT_COMMAND_SQUIRT_TO_CWD : SQUIRT_COMMAND_SQUIRT) != 0) {
     fatalError("failed to connect to squirtd server");
   }
 
@@ -62,17 +56,32 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
     amigaFilename = basename((char*)filename);
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(squirt_socketFd, amigaFilename) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, amigaFilename) != 0) {
     fatalError("send() name failed");
   }
 
-  if (util_sendU32(squirt_socketFd, fileLength) != 0) {
+  if (util_sendU32(main_socketFd, fileLength) != 0) {
     fatalError("send() fileLength failed");
   }
 
-  if (util_sendU32(squirt_socketFd, protection) != 0) {
-    fatalError("send() protection failed");
-  }
+#if 0
+    if (util_sendU32(main_socketFd, protection) != 0) {
+      fatalError("send() protection failed");
+    }
+
+    if (util_sendU32(main_socketFd, dateStamp->days) != 0) {
+      fatalError("send() datestamp failed");
+    }
+
+    if (util_sendU32(main_socketFd, dateStamp->mins) != 0) {
+      fatalError("send() datestamp failed");
+    }
+
+    if (util_sendU32(main_socketFd, dateStamp->ticks) != 0) {
+      fatalError("send() datestamp failed");
+    }
+#endif
+
 
   squirt_fileFd = util_open(filename, O_RDONLY|_O_BINARY);
 
@@ -92,7 +101,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
     if ((len = read(squirt_fileFd, squirt_readBuffer, BLOCK_SIZE) ) < 0) {
       fatalError("failed to read %s", filename);
     } else {
-      if ((send(squirt_socketFd, squirt_readBuffer, len, 0)) != len) {
+      if ((send(main_socketFd, squirt_readBuffer, len, 0)) != len) {
 	fatalError("send() failed");
       }
       //      int old = total;
@@ -112,7 +121,7 @@ squirt_file(const char* hostname, const char* filename, const char* destFilename
 
   uint32_t error;
 
-  if (util_recvU32(squirt_socketFd, &error) != 0) {
+  if (util_recvU32(main_socketFd, &error) != 0) {
     fatalError("squirt: failed to read remote status");
   }
 
@@ -140,5 +149,6 @@ squirt_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
-  squirt_file(argv[1], argv[2], 0, 0, 0, 1);
+  util_connect(argv[1]);
+  squirt_file(argv[2], 0, 0, 1);
 }

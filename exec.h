@@ -1,7 +1,7 @@
 #pragma once
 
 int
-exec_cmd(const char* hostname, int argc, char** argv);
+exec_cmd(int argc, char** argv);
 
 void
 exec_cleanup(void);

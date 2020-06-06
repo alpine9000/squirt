@@ -8,7 +8,6 @@
 #include "main.h"
 #include "common.h"
 
-static int suck_socketFd = 0;
 static int suck_fileFd = 0;
 static char* suck_readBuffer = 0;
 static struct timeval suck_start;
@@ -22,11 +21,6 @@ suck_cleanup(void)
     suck_readBuffer = 0;
   }
 
-  if (suck_socketFd > 0) {
-    close(suck_socketFd);
-    suck_socketFd = 0;
-  }
-
   if (suck_fileFd) {
     close(suck_fileFd);
     suck_fileFd = 0;
@@ -35,27 +29,33 @@ suck_cleanup(void)
 
 
 int32_t
-squirt_suckFile(const char* hostname, const char* filename, int progress, const char* destFilename, uint32_t* protection)
+squirt_suckFile(const char* filename, int progress, const char* destFilename, uint32_t* protection)
 {
+  printf("squirt_suckFile: %s\n", filename);
   int32_t total = 0;
 
   fflush(stdout);
 
-  if ((suck_socketFd = util_connect(hostname, SQUIRT_COMMAND_SUCK)) < 0) {
+  if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_SUCK) !=  0) {
     fatalError("failed to connect to squirtd server");
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(suck_socketFd, filename) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, filename) != 0) {
     fatalError("send() filename failed");
   }
 
 
   int32_t fileLength;
-  if (util_recv32(suck_socketFd, &fileLength) != 0) {
+  if (util_recv32(main_socketFd, &fileLength) != 0) {
     fatalError("util_recv() Filelength failed");
   }
 
-  if (util_recvU32(suck_socketFd, protection) != 0) {
+
+  if (fileLength == -1) {
+    return -1;
+  }
+
+  if (util_recvU32(main_socketFd, protection) != 0) {
     fatalError("util_recv() protection failed");
   }
 
@@ -91,7 +91,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
       } else {
 	requestLength = fileLength - total;
       }
-      if ((len = util_recv(suck_socketFd, suck_readBuffer, requestLength, 0)) < 0) {
+      if ((len = util_recv(main_socketFd, suck_readBuffer, requestLength, 0)) < 0) {
 	fflush(stdout);
 	fatalError("\nfailed to read");
       } else {
@@ -117,7 +117,7 @@ squirt_suckFile(const char* hostname, const char* filename, int progress, const 
 
 
   uint32_t error;
-  if (util_recvU32(suck_socketFd, &error) != 0) {
+  if (util_recvU32(main_socketFd, &error) != 0) {
     return -1;
   }
 
@@ -141,8 +141,10 @@ suck_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
   }
 
+  util_connect(argv[1]);
+
   uint32_t protection;
-  int32_t length = squirt_suckFile(argv[1], argv[2], 1, 0, &protection);
+  int32_t length = squirt_suckFile(argv[2], 1, 0, &protection);
 
   struct timeval end;
 

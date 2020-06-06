@@ -8,7 +8,6 @@
 #include "main.h"
 #include "common.h"
 
-static int exec_socketFd = 0;
 static char* exec_command = 0;
 
 
@@ -19,20 +18,14 @@ exec_cleanup(void)
     free(exec_command);
     exec_command = 0;
   }
-
-  if (exec_socketFd > 0) {
-    close(exec_socketFd);
-    exec_socketFd = 0;
-  }
 }
 
 
 int
-exec_cmd(const char* hostname, int argc, char** argv)
+exec_cmd(int argc, char** argv)
 {
   uint8_t commandCode;
   int commandLength = 0;
-  exec_socketFd = 0;
   exec_command = 0;
 
   if (argc == 2 && strcmp("cd", argv[0]) == 0) {
@@ -55,11 +48,11 @@ exec_cmd(const char* hostname, int argc, char** argv)
     commandCode = SQUIRT_COMMAND_CLI;
   }
 
-  if ((exec_socketFd = util_connect(hostname, commandCode)) < 0) {
+  if (util_sendCommand(main_socketFd, commandCode) != 0) {
     fatalError("failed to connect to squirtd server");
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(exec_socketFd, exec_command) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, exec_command) != 0) {
     fatalError("send() command failed");
   }
 
@@ -70,7 +63,7 @@ exec_cmd(const char* hostname, int argc, char** argv)
     int bindex = 0;
 #endif
     int exitState = 0;
-    while (util_recv(exec_socketFd, &c, 1, 0)) {
+    while (util_recv(main_socketFd, &c, 1, 0)) {
       if (c == 0) {
 	exitState++;
 	if (exitState == 4) {
@@ -102,7 +95,7 @@ exec_cmd(const char* hostname, int argc, char** argv)
 
   uint32_t error;
 
-  if (util_recvU32(exec_socketFd, &error) != 0) {
+  if (util_recvU32(main_socketFd, &error) != 0) {
     fatalError("exec: failed to read remote status");
   }
 
@@ -119,15 +112,14 @@ exec_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
   }
 
-  const char* hostname = argv[1];
-
   for (int i = 0; i < argc-2; i++) {
     argv[i] = argv[i+2];
   }
 
   argc-=2;
 
-  uint32_t error = exec_cmd(hostname, argc, argv);
+  util_connect(argv[1]);
+  uint32_t error = exec_cmd(argc, argv);
 
   if (error != 0) {
     fatalError("%s", util_getErrorString(error));

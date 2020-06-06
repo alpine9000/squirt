@@ -6,8 +6,10 @@
 const char*
 util_formatNumber(int number);
 
-int
-util_connect(const char* hostname, uint32_t commandCode);
+void
+util_connect(const char* hostname);
+
+#define util_sendCommand(s, x) util_sendU32(s, x)
 
 const char*
 util_getHomeDir(void);
@@ -74,3 +76,9 @@ util_isDirectory(const char *path);
 
 int
 util_system(char** argv);
+
+int
+util_cd(const char* dir);
+
+char*
+util_safeName(const char* name);

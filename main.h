@@ -10,7 +10,8 @@
 #include "main.h"
 #include "backup.h"
 #include "squirt.h"
-
+#include "restore.h"
+#include "protect.h"
 
 #ifndef _WIN32
 #include <netinet/in.h>
@@ -23,7 +24,7 @@
 
 extern const char* main_argv0;
 extern int main_screenWidth;
-
+extern int main_socketFd;
 
 _Noreturn void
 main_fatalError(const char *format, ...);

@@ -20,10 +20,10 @@ typedef struct hostfile {
   char** argv;
   char* remoteFilename;
   struct hostfile* next;
+  dir_datestamp_t dateStamp;
   uint32_t remoteProtection;
 } cli_hostfile_t;
 
-static const char* cli_hostname = 0;
 static char* cli_currentDir = 0;
 static dir_entry_list_t *cli_dirEntryList = 0;
 static char* cli_readLineBase = 0;
@@ -219,7 +219,7 @@ cli_freeHostFile(cli_hostfile_t* file)
 
 
 static cli_hostfile_t*
-cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* remote)
+cli_convertFileToHost(cli_hostfile_t** list, const char* remote)
 {
   cli_hostfile_t *file = calloc(1, sizeof(cli_hostfile_t));
   char* local = strdup(remote);
@@ -233,7 +233,8 @@ cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* r
   free(local);
   util_mkpath(file->localFilename);
 
-  int error = squirt_suckFile(hostname, file->remoteFilename, 0, file->localFilename, &file->remoteProtection);
+  memset(&file->dateStamp, 0, sizeof(file->dateStamp));
+  int error = squirt_suckFile(file->remoteFilename, 0, file->localFilename, &file->remoteProtection);
   if (error == -ERROR_SUCK_ON_DIR) {
     fprintf(stderr, "error: failed to access remote directory %s\n", file->remoteFilename);
     free(file);
@@ -259,11 +260,15 @@ cli_convertFileToHost(const char* hostname, cli_hostfile_t** list, const char* r
 
 
 static int
-cli_saveFileIfModified(const char* hostname, cli_hostfile_t* file)
+cli_saveFileIfModified(cli_hostfile_t* file)
 {
   int success = 0;
   if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
-    success = squirt_file(hostname, file->localFilename, file->remoteFilename, file->remoteProtection, 1, 0) == 0;
+    success = squirt_file(file->localFilename, file->remoteFilename, 1, 0) == 0;
+    if (success) {
+      dir_datestamp_t dateStamp = {0};
+      success = protect_file(file->remoteFilename, file->remoteProtection, &dateStamp);
+    }
   }
 
   return success;
@@ -271,7 +276,7 @@ cli_saveFileIfModified(const char* hostname, cli_hostfile_t* file)
 
 
 static int
-cli_hostCommand(const char* hostname, int argc, char** argv)
+cli_hostCommand(int argc, char** argv)
 {
   int success = 0;
   (void)argc,(void)argv;
@@ -280,7 +285,7 @@ cli_hostCommand(const char* hostname, int argc, char** argv)
 
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] != '~' && argv[i][0] != '!' && argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
-      cli_hostfile_t* hostFile = cli_convertFileToHost(hostname, &list, argv[i]);
+      cli_hostfile_t* hostFile = cli_convertFileToHost(&list, argv[i]);
       if (hostFile) {
 	hostFile->argv = &argv[i];
 	argv[i] = hostFile->localFilename;
@@ -305,7 +310,7 @@ cli_hostCommand(const char* hostname, int argc, char** argv)
   {
     cli_hostfile_t* file = list;
     while (file) {
-      cli_saveFileIfModified(hostname, file);
+      cli_saveFileIfModified(file);
       cli_hostfile_t* save = file;
       file = file->next;
       *save->argv = save->remoteFilename;
@@ -320,7 +325,7 @@ cli_hostCommand(const char* hostname, int argc, char** argv)
 
 
 static int
-cli_runCommand(const char* hostname, char* line)
+cli_runCommand(char* line)
 {
   int code;
   int end = strlen(line);
@@ -334,7 +339,7 @@ cli_runCommand(const char* hostname, char* line)
   if (strcmp("endcli", argv[0]) == 0) {
     main_cleanupAndExit(EXIT_SUCCESS);
   } else if (argc == 2 && strcmp("cd", argv[0]) == 0) {
-    if (exec_cmd(hostname, argc, argv) == 0) {
+    if (exec_cmd(argc, argv) == 0) {
       cli_changeDir(argv[1]);
       code = 1;
     } else {
@@ -342,9 +347,9 @@ cli_runCommand(const char* hostname, char* line)
       code = 0;
     }
   } else if (argv[0][0] == '!') {
-    code = cli_hostCommand(hostname, argc, argv);
+    code = cli_hostCommand(argc, argv);
   } else {
-    code = exec_cmd(hostname, argc, argv);
+    code = exec_cmd(argc, argv);
   }
 
   argv_free(argv);
@@ -409,7 +414,7 @@ cli_completeHook(const char* text)
   if (cli_dirEntryList) {
     dir_freeEntryList(cli_dirEntryList);
   }
-  cli_dirEntryList = dir_read(cli_hostname, cli_readLineBase);
+  cli_dirEntryList = dir_read(cli_readLineBase);
 }
 
 
@@ -425,14 +430,14 @@ cli_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname", main_argv0);
   }
 
-  cli_hostname = argv[1];
 
+  util_connect(argv[1]);
   util_onCtrlC(cli_onExit);
 
   srl_init(cli_prompt, cli_completeHook, cli_completeGenerator);
 
   do {
-    const char* cwd = cwd_read(cli_hostname);
+    const char* cwd = cwd_read();
     if (!cwd) {
       fatalError("failed to get cwd");
     }
@@ -440,7 +445,7 @@ cli_main(int argc, char* argv[])
     free((void*)cwd);
     char* command = srl_gets();
     if (command && strlen(command)) {
-      cli_runCommand(argv[1], command);
+      cli_runCommand(command);
     }
   } while (1);
 }

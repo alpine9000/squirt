@@ -10,9 +10,9 @@ STATIC_ANALYZE=-fanalyzer
 endif
 
 SQUIRTD_SRCS=squirtd.c
-SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c
-CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd
-HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h
+SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c
+CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
+HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h
 
 VBCC_CC=vc
 AMIGA_GCC_PREFIX=/usr/local/amiga/bebbo
@@ -33,7 +33,7 @@ SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
 HOST_CLIENT_APPS=$(addprefix build/, $(CLIENT_APPS))
-SERVER_APPS=build/amiga/squirtd build/amiga/squirtd.vbcc
+SERVER_APPS=build/amiga/squirtd #build/amiga/squirtd.vbcc
 
 all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
 

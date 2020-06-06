@@ -4,7 +4,7 @@ void
 cwd_cleanup(void);
 
 const char*
-cwd_read(const char* hostname);
+cwd_read(void);
 
 void
 cwd_main(int argc, char* argv[]);

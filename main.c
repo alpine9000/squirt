@@ -14,11 +14,15 @@
 
 const char* main_argv0;
 int main_screenWidth = 0;
-
+int main_socketFd = 0;
 
 _Noreturn void
 main_cleanupAndExit(int errorCode)
 {
+  if (main_socketFd) {
+    close(main_socketFd);
+    main_socketFd = 0;
+  }
   backup_cleanup();
   cli_cleanup();
   cwd_cleanup();
@@ -27,6 +31,8 @@ main_cleanupAndExit(int errorCode)
   dir_cleanup();
   srl_cleanup();
   squirt_cleanup();
+  restore_cleanup();
+  protect_cleanup();
   exit(errorCode);
 }
 
@@ -61,6 +67,7 @@ int main(int argc, char* argv[])
   WSAStartup(MAKEWORD(2,2), &wsaData);
 #endif
 
+
   if (strstr(basename(argv[0]), "squirt_suck")) {
     suck_main(argc, argv);
   } else  if (strstr(basename(argv[0]), "squirt_exec")) {
@@ -71,6 +78,8 @@ int main(int argc, char* argv[])
     dir_main(argc, argv);
   } else if (strstr(basename(argv[0]), "squirt_backup")) {
     backup_main(argc, argv);
+  } else if (strstr(basename(argv[0]), "squirt_restore")) {
+    restore_main(argc, argv);
   } else if (strstr(basename(argv[0]), "squirt_cwd")) {
     cwd_main(argc, argv);
   } else {

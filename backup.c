@@ -13,16 +13,15 @@
 
 #include "main.h"
 #include "common.h"
+#include "exall.h"
 
 
 static void
-backup_backupDir(const char* hostname, const char* dir);
+backup_backupDir(const char* dir);
 
-#define SQUIRT_EXALL_INFO_DIR  ".__squirt"
-static const char* SQUIRT_EXALL_INFO_DIR_NAME = SQUIRT_EXALL_INFO_DIR"/";
+
 static char* backup_currentDir = 0;
 static char* backup_skipFile = 0;
-static int backup_socketFd = 0;
 static char* backup_dirBuffer = 0;
 static int backup_prune = 0;
 
@@ -39,105 +38,12 @@ backup_cleanup()
     backup_skipFile = 0;
   }
 
-  if (backup_socketFd) {
-    close(backup_socketFd);
-    backup_socketFd = 0;
-  }
-
   if (backup_dirBuffer) {
     free(backup_dirBuffer);
     backup_dirBuffer = 0;
   }
 }
 
-
-static char*
-_scanString(FILE* fp)
-{
-  char buffer[108] = {0};
-  int c = fscanf(fp, "%*[^:]:%107[^\n]%*c", buffer);
-  if (c == 1) {
-    char* str = malloc(strlen(buffer)+1);
-    strcpy(str, buffer);
-    return str;
-  } else {
-    return 0;
-  }
-}
-
-
-static int
-_scanInt(FILE* fp)
-{
-  int number = 0;
-  if (fscanf(fp, "%*[^:]:%d%*c", &number) == 1) {
-    return number;
-  } else {
-    return -1;
-  }
-}
-
-
-static char*
-_scanComment(FILE* fp)
-{
-  char buffer[128] = {0};
-  char* ptr = buffer;
-  int len;
-  char c;
-
-  do {
-    len = fread(&c, 1, 1, fp);
-    ptr++;
-  } while (len > 0 && c != ':');
-
-  size_t i = 0;
-  do {
-    len = fread(&buffer[i], 1, 1, fp);
-    i++;
-  } while (len > 0 && i < sizeof(buffer));
-
-  char* comment = 0;
-  if (strlen(buffer) > 0) {
-    comment = malloc(strlen(buffer)+1);
-    strcpy((char*)comment, buffer);
-  }
-
-  return comment;
-}
-
-
-
-static int
-backup_readExAllData(dir_entry_t* entry, const char* path)
-{
-  if (!entry) {
-    fatalError("readExAllData called with null entry");
-  }
-  const char* baseName = util_amigaBaseName(path);
-  const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
-  util_mkdir(ident, 0777);
-  char* name = malloc(strlen(baseName)+1+strlen(ident));
-  sprintf(name, "%s%s", ident, baseName);
-  FILE *fp = fopen(name, "r+");
-  if (!fp) {
-    free(name);
-    return 0;
-  }
-  entry->name = _scanString(fp);
-  entry->type = _scanInt(fp);
-  entry->size = _scanInt(fp);
-  entry->prot = _scanInt(fp);
-  entry->days = _scanInt(fp);
-  entry->mins = _scanInt(fp);
-  entry->ticks = _scanInt(fp);
-  entry->comment = _scanComment(fp);
-
-  fclose(fp);
-  free(name);
-
-  return 1;
-}
 
 static char*
 backup_fullPath(const char* name)
@@ -159,101 +65,6 @@ backup_fullPath(const char* name)
 }
 
 
-static int
-backup_saveExAllData(dir_entry_t* entry, const char* path)
-{
-  const char* baseName = util_amigaBaseName(path);
-  const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
-  util_mkdir(ident, 0777);
-  char* name = malloc(strlen(baseName)+1+strlen(ident));
-  sprintf(name, "%s%s", ident, baseName);
-  FILE *fp = fopen(name, "w");
-
-  if (!fp) {
-    free(name);
-    return 0;
-  }
-
-
-  struct timeval tv ;
-  int sec = entry->ticks / 50;
-  tv.tv_sec = (DIR_AMIGA_EPOC_ADJUSTMENT_DAYS*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
-  tv.tv_usec = (entry->ticks - (sec * 50)) * 200;
-  time_t _time = tv.tv_sec;
-
-  struct tm *tm = gmtime(&_time);
-  struct utimbuf ut;
-
-  struct stat st;
-
-  if (stat(baseName, &st) != 0) {
-    fatalError("failed to get file attributes of %s %s\n", baseName, backup_fullPath(entry->name));
-  }
-
-  ut.actime = st.st_atime;
-  ut.modtime = mktime(tm);
-
-  if (utime(baseName, &ut) != 0) {
-    fatalError("failed to set file attributes of %s\n", baseName);
-  }
-
-  fprintf(fp, "name:%s\n", entry->name);
-  fprintf(fp, "type:%d\n", entry->type);
-  fprintf(fp, "size:%d\n", entry->size);
-  fprintf(fp, "prot:%d\n", entry->prot);
-  fprintf(fp, "days:%d\n", entry->days);
-  fprintf(fp, "mins:%d\n", entry->mins);
-  fprintf(fp, "ticks:%d\n", entry->ticks);
-  if (entry->comment) {
-    fprintf(fp, "comment:%s", entry->comment);
-  } else {
-    fprintf(fp, "comment:");
-  }
-  fclose(fp);
-
-  free(name);
-  return 1;
-}
-
-
-static int
-backup_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
-{
-  int identical =
-    one->name != NULL && two->name != NULL &&
-    strcmp(one->name, two->name) == 0 &&
-    ((one->comment == 0 && two->comment == 0)||
-     (one->comment != 0 && two->comment != 0 && strcmp(one->comment, two->comment) == 0)) &&
-    one->type == two->type &&
-    one->size == two->size &&
-    one->prot == two->prot &&
-    one->days == two->days &&
-    one->mins == two->mins &&
-    one->ticks == two->ticks;
-
-#if 0
-  if (!identical) {
-    printf(">%s<>%s< %d\n", one->name, two->name, strcmp(one->name, two->name) );
-    printf("%d %d\n", one->comment == 0, two->comment == 0);
-    if (one->comment != 0) {
-      printf("1:>%s<\n", one->comment);
-    }
-    if (two->comment != 0) {
-      printf("2:>%s<\n", two->comment);
-    }
-    printf("%d %d %d\n", one->type, two->type, one->type == two->type);
-    printf("%d %d %d\n", one->size, two->size, one->size == two->size);
-    printf("%d %d %d\n", one->prot, two->prot, one->prot == two->prot);
-    printf("%d %d %d\n", one->days, two->days, one->days == two->days);
-    printf("%d %d %d\n", one->mins, two->mins, one->mins == two->mins);
-    printf("%d %d %d\n", one->ticks, two->ticks, one->ticks == two->ticks);
-  }
-#endif
-
-  return identical;
-}
-
-
 static void
 backup_pruneFiles(const char* filename, void* data)
 {
@@ -267,7 +78,7 @@ backup_pruneFiles(const char* filename, void* data)
   int found = 0;
   while (entry) {
     if (strcmp(entry->name, filename) == 0) {
-      found = 1;
+     found = 1;
       break;
     }
     entry = entry->next;
@@ -286,7 +97,7 @@ backup_pruneFiles(const char* filename, void* data)
 }
 
 static void
-backup_backupList(const char* hostname, dir_entry_list_t* list)
+backup_backupList(dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
 
@@ -307,9 +118,9 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	struct stat st;
 	if (stat(util_amigaBaseName(path), &st) == 0) {
 	  if (st.st_size == (off_t)entry->size) {
-	    skip = backup_readExAllData(temp, path);
+	    skip = exall_readExAllData(temp, path);
 	    if (skip) {
-	      skip = backup_identicalExAllData(temp, entry);
+	      skip = exall_identicalExAllData(temp, entry);
 	    }
 	  }
 	}
@@ -325,10 +136,10 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	}
       } else {
 	uint32_t protect;
-	if (squirt_suckFile(hostname, path, 1, 0, &protect) < 0) {
+	if (squirt_suckFile(path, 1, 0, &protect) < 0) {
 	  fatalError("failed to backup %s", path);
 	}
-	backup_saveExAllData(entry, path);
+	exall_saveExAllData(entry, path);
 	printf("\n");
 	fflush(stdout);
       }
@@ -350,8 +161,8 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	}
       }
       if (!skipFile) {
-	backup_backupDir(hostname, entry->name);
-	backup_saveExAllData(entry, path);
+	backup_backupDir(entry->name);
+	exall_saveExAllData(entry, path);
 	free((void*)path);
       } else {
 	printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
@@ -368,51 +179,8 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 }
 
 
-static int
-backup_cd(const char* hostname, const char* dir)
-{
-  uint32_t error = 0;
-
-  if ((backup_socketFd = util_connect(hostname, SQUIRT_COMMAND_CD)) < 0) {
-    fatalError("failed to connect to squirtd server");
-  }
-
-  if (util_sendLengthAndUtf8StringAsLatin1(backup_socketFd, dir) != 0) {
-    fatalError("send() command failed");
-  }
-
-  if (util_recvU32(backup_socketFd, &error) != 0) {
-    fatalError("cd: failed to read remote status");
-  }
-
-  return error;
-}
-
-
-
 static char*
-backup_safeName(const char* name)
-{
-  char* safe = malloc(strlen(name)+1);
-  char* dest = safe;
-  if (dest) {
-    while (*name) {
-      if (*name != ':') {
-	*dest = *name;
-	dest++;
-      }
-      name++;
-    }
-    *dest = 0;
-  }
-
-  return safe;
-}
-
-
-
-static char*
-backup_pushDir(const char* hostname, const char* dir)
+backup_pushDir(const char* dir)
 {
   if (backup_currentDir) {
     char* newDir = backup_fullPath(dir);
@@ -425,11 +193,11 @@ backup_pushDir(const char* hostname, const char* dir)
     strcpy(backup_currentDir, dir);
   }
 
-  if (backup_cd(hostname, backup_currentDir) != 0) {
+  if (util_cd(backup_currentDir) != 0) {
     fatalError("unable to backup %s", backup_currentDir);
   }
 
-  char* safe = backup_safeName(dir);
+  char* safe = util_safeName(dir);
   if (!safe) {
     fatalError("failed to create safe name");
   }
@@ -470,12 +238,12 @@ backup_popDir(char* cwd)
 
 
 static void
-backup_backupDir(const char* hostname, const char* dir)
+backup_backupDir(const char* dir)
 {
-  char* cwd = backup_pushDir(hostname, dir);
+  char* cwd = backup_pushDir(dir);
   //  printf("%s/ \xE2\x9C\x93\n", backup_currentDir);
   printf("%s \xE2\x9C\x85\n", backup_currentDir);
-  if (dir_process(hostname, backup_currentDir, backup_backupList) != 0) {
+  if (dir_process(backup_currentDir, backup_backupList) != 0) {
     fatalError("unable to read %s", dir);
   }
 
@@ -580,12 +348,12 @@ backup_main(int argc, char* argv[])
 	fatalError("malloc failed");
       }
       sprintf(backup_dirBuffer, "%s:", dir);
-      free(backup_pushDir(hostname, backup_dirBuffer));
+      free(backup_pushDir(backup_dirBuffer));
       do {
 	dir = token;
 	token = strtok(0, "/");
 	if (token) {
-	  free(backup_pushDir(hostname, dir));
+	  free(backup_pushDir(dir));
 	}
       } while (token);
     } else {
@@ -599,7 +367,8 @@ backup_main(int argc, char* argv[])
   }
 
   if (dir) {
-    backup_backupDir(hostname, dir);
+    util_connect(hostname);
+    backup_backupDir(dir);
   }
 
 

@@ -13,8 +13,6 @@
 
 static dir_entry_list_t* dir_entryLists = 0;
 
-static int dir_socketFd = 0;
-
 
 dir_entry_list_t*
 dir_newEntryList(void)
@@ -40,10 +38,7 @@ dir_newEntryList(void)
 void
 dir_cleanup(void)
 {
-  if (dir_socketFd > 0) {
-    close(dir_socketFd);
-    dir_socketFd = 0;
-  }
+
 }
 
 
@@ -70,9 +65,9 @@ dir_pushDirEntry(dir_entry_list_t* list, const char* name, int32_t type, uint32_
   entry->name = name;
   entry->type = type;
   entry->prot = prot;
-  entry->days = days;
-  entry->mins = mins;
-  entry->ticks = ticks;
+  entry->ds.days = days;
+  entry->ds.mins = mins;
+  entry->ds.ticks = ticks;
   entry->size = size;
   entry->comment = comment;
 }
@@ -169,9 +164,9 @@ dir_formatDateTime(dir_entry_t* entry)
   struct tm *nowtm;
   static char tmbuf[64];
 
-  int sec = entry->ticks / 50;
-  tv.tv_sec = (DIR_AMIGA_EPOC_ADJUSTMENT_DAYS*24*60*60)+(entry->days*(24*60*60)) + (entry->mins*60) + sec;
-  tv.tv_usec = (entry->ticks - (sec * 50)) * 200;
+  int sec = entry->ds.ticks / 50;
+  tv.tv_sec = (DIR_AMIGA_EPOC_ADJUSTMENT_DAYS*24*60*60)+(entry->ds.days*(24*60*60)) + (entry->ds.mins*60) + sec;
+  tv.tv_usec = (entry->ds.ticks - (sec * 50)) * 200;
   nowtime = tv.tv_sec;
   nowtm = gmtime(&nowtime);
   strftime(tmbuf, sizeof tmbuf, "%m-%d-%y %H:%M:%S", nowtm);
@@ -180,10 +175,8 @@ dir_formatDateTime(dir_entry_t* entry)
 
 
 static void
-squirt_dirPrintEntryList(const char* hostname, dir_entry_list_t* list)
+squirt_dirPrintEntryList( dir_entry_list_t* list)
 {
-  (void)hostname;
-
   dir_entry_t* entry = list->head;
   int maxSizeLength = 0;
 
@@ -222,15 +215,15 @@ dir_getDirEntry(dir_entry_list_t* entryList)
 {
   uint32_t nameLength;
 
-  if (util_recvU32(dir_socketFd, &nameLength) != 0) {
+  if (util_recvU32(main_socketFd, &nameLength) != 0) {
     fatalError("failed to read name length");
   }
 
-  if (nameLength == 0) {
+  if (nameLength == 0xFFFFFFFF) {
     return 0;
   }
 
-  char* buffer = util_recvLatin1AsUtf8(dir_socketFd, nameLength);
+  char* buffer = util_recvLatin1AsUtf8(main_socketFd, nameLength);
 
   if (!buffer) {
     fprintf(stderr, "failed to read name\n");
@@ -238,44 +231,44 @@ dir_getDirEntry(dir_entry_list_t* entryList)
   }
 
   int32_t type;
-  if (util_recv32(dir_socketFd, &type) != 0) {
+  if (util_recv32(main_socketFd, &type) != 0) {
     fatalError("failed to read type");
   }
 
   uint32_t size;
-  if (util_recvU32(dir_socketFd, &size) != 0) {
+  if (util_recvU32(main_socketFd, &size) != 0) {
     fatalError("failed to read file size");
   }
 
   uint32_t prot;
-  if (util_recvU32(dir_socketFd, &prot) != 0) {
+  if (util_recvU32(main_socketFd, &prot) != 0) {
     fatalError("failed to read file prot");
   }
 
   uint32_t days;
-  if (util_recvU32(dir_socketFd, &days) != 0) {
+  if (util_recvU32(main_socketFd, &days) != 0) {
     fatalError("failed to read file days");
   }
 
 
   uint32_t mins;
-  if (util_recvU32(dir_socketFd, &mins) != 0) {
+  if (util_recvU32(main_socketFd, &mins) != 0) {
     fatalError("failed to read file mins");
   }
 
   uint32_t ticks;
-  if (util_recvU32(dir_socketFd, &ticks) != 0) {
+  if (util_recvU32(main_socketFd, &ticks) != 0) {
     fatalError("failed to read file ticks");
   }
 
   uint32_t commentLength;
-  if (util_recvU32(dir_socketFd, &commentLength) != 0) {
+  if (util_recvU32(main_socketFd, &commentLength) != 0) {
     fatalError("failed to read comment length");
   }
 
   char* comment;
   if (commentLength > 0) {
-    comment = util_recvLatin1AsUtf8(dir_socketFd, commentLength);
+    comment = util_recvLatin1AsUtf8(main_socketFd, commentLength);
   } else {
     comment = 0;
   }
@@ -287,13 +280,13 @@ dir_getDirEntry(dir_entry_list_t* entryList)
 
 
 dir_entry_list_t*
-dir_read(const char* hostname, const char* command)
+dir_read(const char* command)
 {
-  if ((dir_socketFd = util_connect(hostname, SQUIRT_COMMAND_DIR)) < 0) {
-    fatalError("failed to connect to squirtd server %d", dir_socketFd);
+  if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_DIR) != 0) {
+    fatalError("failed to connect to squirtd server %d", main_socketFd);
   }
 
-  if (util_sendLengthAndUtf8StringAsLatin1(dir_socketFd, command) != 0) {
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, command) != 0) {
     fatalError("send() command failed");
   }
 
@@ -305,8 +298,8 @@ dir_read(const char* hostname, const char* command)
 
   uint32_t error;
 
-  if (util_recvU32(dir_socketFd, &error) != 0) {
-    fatalError("dir: failed to read remote status");
+  if (util_recvU32(main_socketFd, &error) != 0) {
+    fatalError("dir: failed to read remote status: %s", command);
   }
 
   if (error != 0) {
@@ -321,16 +314,16 @@ dir_read(const char* hostname, const char* command)
 
 
 int
-dir_process(const char* hostname, const char* command, void(*process)(const char* hostname, dir_entry_list_t*))
+dir_process(const char* command, void(*process)(dir_entry_list_t*))
 {
   int error = 0;
-  dir_entry_list_t *entryList = dir_read(hostname, command);
+  dir_entry_list_t *entryList = dir_read(command);
 
   if (entryList == 0) {
     error = -1;
   } else {
     if (process) {
-      process(hostname, entryList);
+      process(entryList);
     }
 
     dir_freeEntryList(entryList);
@@ -346,7 +339,8 @@ dir_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname dir_name", main_argv0);
   }
 
-  if (dir_process(argv[1], argv[2], squirt_dirPrintEntryList) != 0) {
+  util_connect(argv[1]);
+  if (dir_process(argv[2], squirt_dirPrintEntryList) != 0) {
     fatalError("unable to read %s", argv[2]);
   }
 }
