@@ -25,7 +25,7 @@ extern const char* main_argv0;
 extern int main_screenWidth;
 
 
-void
+_Noreturn void
 main_fatalError(const char *format, ...);
 
 _Noreturn void

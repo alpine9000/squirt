@@ -2,6 +2,7 @@
 #define _XOPEN_SOURCE 500
 #define _POSIX_C_SOURCE 200809L
 #endif
+#include <dirent.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -135,6 +136,26 @@ util_mkpath(const char *dir)
   }
 
   return error;
+}
+
+
+int
+util_dirOperation(const char* directory, void (*operation)(const char* filename, void* data), void* data)
+{
+  DIR * dir =  opendir(directory);
+  if (!dir) {
+    return -1;
+  }
+
+  struct dirent *dp;
+  while ((dp = readdir(dir)) != NULL) {
+    if (operation) {
+      operation(dp->d_name, data);
+    }
+  }
+
+  closedir(dir);
+  return 1;
 }
 
 

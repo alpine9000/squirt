@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <utime.h>
+#include <limits.h>
+#include <getopt.h>
 #include <sys/stat.h>
 
 #include "main.h"
@@ -16,12 +18,13 @@
 static void
 backup_backupDir(const char* hostname, const char* dir);
 
-static const char* SQUIRT_EXALL_INFO_DIR_NAME = ".__squirt/";
+#define SQUIRT_EXALL_INFO_DIR  ".__squirt"
+static const char* SQUIRT_EXALL_INFO_DIR_NAME = SQUIRT_EXALL_INFO_DIR"/";
 static char* backup_currentDir = 0;
 static char* backup_skipFile = 0;
 static int backup_socketFd = 0;
 static char* backup_dirBuffer = 0;
-
+static int backup_prune = 0;
 
 void
 backup_cleanup()
@@ -251,7 +254,36 @@ backup_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 }
 
 
+static void
+backup_pruneFiles(const char* filename, void* data)
+{
+  if (strcmp(filename, ".") == 0 ||
+      strcmp(filename, "..") == 0 ||
+      strcmp(filename, SQUIRT_EXALL_INFO_DIR) == 0) {
+    return;
+  }
+  dir_entry_list_t* list = data;
+  dir_entry_t* entry = list->head;
+  int found = 0;
+  while (entry) {
+    if (strcmp(entry->name, filename) == 0) {
+      found = 1;
+      break;
+    }
+    entry = entry->next;
+  }
 
+  if (!found) {
+    char exFilename[PATH_MAX];
+    snprintf(exFilename, sizeof(exFilename), "%s%s", SQUIRT_EXALL_INFO_DIR_NAME, filename);
+    char* path = backup_fullPath(filename);
+    printf("%c[31m%s \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80 REMOVED \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80%c[0m\n", 27, path, 27);
+    free(path);
+    if (unlink(filename) != 0 || unlink(exFilename) != 0) {
+      fatalError("failed to remove %s\n", filename);
+    }
+  }
+}
 
 static void
 backup_backupList(const char* hostname, dir_entry_list_t* list)
@@ -288,7 +320,8 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 	if (skipFile) {
 	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
 	} else {
-	  printf("%s \xE2\x9C\x93\n", path);
+	  //	  printf("%s \xE2\x9C\x93\n", path);
+	  printf("%s \xE2\x9C\x85\n", path);
 	}
       } else {
 	uint32_t protect;
@@ -327,6 +360,10 @@ backup_backupList(const char* hostname, dir_entry_list_t* list)
 
     }
     entry = entry->next;
+  }
+
+  if (backup_prune) {
+    util_dirOperation(".", backup_pruneFiles, list);
   }
 }
 
@@ -436,7 +473,8 @@ static void
 backup_backupDir(const char* hostname, const char* dir)
 {
   char* cwd = backup_pushDir(hostname, dir);
-  printf("%s/ \xE2\x9C\x93\n", backup_currentDir);
+  //  printf("%s/ \xE2\x9C\x93\n", backup_currentDir);
+  printf("%s \xE2\x9C\x85\n", backup_currentDir);
   if (dir_process(hostname, backup_currentDir, backup_backupList) != 0) {
     fatalError("unable to read %s", dir);
   }
@@ -451,7 +489,7 @@ backup_loadSkipFile(const char* filename)
   struct stat st;
 
   if (stat(filename, &st) == -1) {
-    fatalError("filed to stat %s", filename);
+    fatalError("filed to load skip file: %s", filename);
   }
 
   int fileLength = st.st_size;
@@ -471,31 +509,65 @@ backup_loadSkipFile(const char* filename)
 }
 
 
+_Noreturn static void
+backup_usage(void)
+{
+  fatalError("invalid arguments\nusage: %s [--prune] [--skipfile=skipfile] hostname dir_name", main_argv0);
+}
+
 
 void
 backup_main(int argc, char* argv[])
 {
   backup_skipFile = 0;
   backup_currentDir = 0;
-  const char* hostname;
-  char* path;
+  const char* hostname = 0;
+  char* path = 0;
+  char* skipfile = 0;
 
-  if (argc < 3) {
-    fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", main_argv0);
-  }
 
-  if (argc == 4) {
-    if (strstr(argv[1], "--skipfile=") == 0) {
-      fatalError("incorrect number of arguments\nusage: %s [--skipfile=skipfile] hostname dir_name", main_argv0);
+  while (optind < argc) {
+    static struct option long_options[] =
+      {
+       {"prune",    no_argument, &backup_prune, 'p'},
+       {"skipfile", required_argument, 0, 's'},
+       {0, 0, 0, 0}
+      };
+    int option_index = 0;
+    char c = getopt_long (argc, argv, "", long_options, &option_index);
+
+    if (c != -1) {
+      switch (c) {
+      case 0:
+	break;
+      case 's':
+	if (optarg == 0 || strlen(optarg) == 0) {
+	  backup_usage();
+	}
+	skipfile = optarg;
+	break;
+      case '?':
+      default:
+	backup_usage();
+	break;
+      }
+    } else {
+      if (hostname == 0) {
+	hostname = argv[optind];
+      } else {
+	path = argv[optind];
+      }
+      optind++;
     }
-    hostname = argv[2];
-    path = argv[3];
-    backup_loadSkipFile(strstr(argv[1], "=")+1);
-  } else {
-    hostname = argv[1];
-    path = argv[2];
   }
 
+  if (!hostname || !path) {
+    backup_usage();
+  }
+
+  if (skipfile) {
+    backup_loadSkipFile(skipfile);
+  }
 
   char* token = strtok(path, ":");
   char* dir = 0;

@@ -19,6 +19,9 @@ int
 util_mkpath(const char *dir);
 
 int
+util_dirOperation(const char* dir, void (*operation)(const char* filename, void* data), void* data);
+
+int
 util_rmdir(const char *dir);
 
 int
