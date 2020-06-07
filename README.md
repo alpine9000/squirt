@@ -1,6 +1,6 @@
 # squirt - Remotely manage your Amiga over TCP/IP from modern systems
 
-`squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage your Amiga over TCP/IP using set of command lines tools running on a modern system. This project has two main purposes for me. I want to be able to quickly transfer, install and automatically test games that I am developing on various Amigas from inside scripts/Makefiles; and incrementally back those Amigas up into git repos. All the existing solutions I could find out there for this kind of work had issues (too slow, needed interactive passwords, used too much ram, had memory leaks or stopped working after a while etc, so `squirt` was born.
+`squirtd` is a small server (the executable is less than 5kb) that lets you remotely manage your Amiga over TCP/IP using set of command lines tools running on a modern system. This project has two main purposes for me. I want to be able to quickly transfer, install and automatically test games that I am developing on various Amigas from Makefiles; and incrementally back those Amigas up into git repos. All the existing solutions I could find out there for this kind of work had issues (too slow, needed interactive passwords, used too much ram, had memory leaks or stopped working after a while etc, so `squirt` was born.
 
 You can:
  * Send (squirt) files
