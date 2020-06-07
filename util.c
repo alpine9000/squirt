@@ -307,7 +307,7 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
     percentage = 100;
   }
 
-  int barWidth = main_screenWidth - 20;
+  int barWidth = main_screenWidth - 23;
   int screenPercentage = (percentage*barWidth)/100;
   struct timeval current;
 
@@ -316,6 +316,13 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
 #else
   printf("\r");
 #endif
+  fflush(stdout);
+  if (percentage >= 100) {
+    printf("\xE2\x9C\x85 "); // utf-8 tick
+  } else {
+    printf("\xE2\x8C\x9B "); // utf-8 hourglass
+  }
+
   printf("%3d%% [", percentage);
 
   for (int i = 0; i < barWidth; i++) {
@@ -327,6 +334,7 @@ util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
       printf(" ");
     }
   }
+
   printf("] ");
 
   gettimeofday(&current, NULL);
@@ -538,9 +546,18 @@ util_isDirectory(const char *path)
 
 
 int
+util_exec(char* command)
+{
+  char** argv = argv_build(command);
+  int error = exec_cmd(argv_argc(argv), argv);
+  argv_free(argv);
+  return error;
+}
+
+
+int
 util_system(char** argv)
 {
-
   int argc = argv_argc(argv);
   int commandLength = 0;
   for (int i = 0; i < argc; i++) {

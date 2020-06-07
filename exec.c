@@ -112,13 +112,14 @@ exec_main(int argc, char* argv[])
     fatalError("incorrect number of arguments\nusage: %s hostname command to be executed", argv[0]);
   }
 
+  util_connect(argv[1]);
+
   for (int i = 0; i < argc-2; i++) {
     argv[i] = argv[i+2];
   }
 
   argc-=2;
 
-  util_connect(argv[1]);
   uint32_t error = exec_cmd(argc, argv);
 
   if (error != 0) {

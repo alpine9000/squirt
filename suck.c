@@ -31,7 +31,6 @@ suck_cleanup(void)
 int32_t
 squirt_suckFile(const char* filename, int progress, const char* destFilename, uint32_t* protection)
 {
-  printf("squirt_suckFile: %s\n", filename);
   int32_t total = 0;
 
   fflush(stdout);

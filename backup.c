@@ -88,7 +88,7 @@ backup_pruneFiles(const char* filename, void* data)
     char exFilename[PATH_MAX];
     snprintf(exFilename, sizeof(exFilename), "%s%s", SQUIRT_EXALL_INFO_DIR_NAME, filename);
     char* path = backup_fullPath(filename);
-    printf("%c[31m%s \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80 REMOVED \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80%c[0m\n", 27, path, 27);
+    printf("%c[31m%s \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80 REMOVED \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80%c[0m\n", 27, path, 27); // red, utf-8 skulls
     free(path);
     if (unlink(filename) != 0 || unlink(exFilename) != 0) {
       fatalError("failed to remove %s\n", filename);
@@ -129,10 +129,9 @@ backup_backupList(dir_entry_list_t* list)
 
       if (skip) {
 	if (skipFile) {
-	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
+	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27); // bold
 	} else {
-	  //	  printf("%s \xE2\x9C\x93\n", path);
-	  printf("%s \xE2\x9C\x85\n", path);
+	  printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
 	}
       } else {
 	uint32_t protect;
@@ -241,8 +240,7 @@ static void
 backup_backupDir(const char* dir)
 {
   char* cwd = backup_pushDir(dir);
-  //  printf("%s/ \xE2\x9C\x93\n", backup_currentDir);
-  printf("%s \xE2\x9C\x85\n", backup_currentDir);
+  printf("\xE2\x9C\x85 %s\n", backup_currentDir); // utf-8 tick
   if (dir_process(backup_currentDir, backup_backupList) != 0) {
     fatalError("unable to read %s", dir);
   }
@@ -251,7 +249,7 @@ backup_backupDir(const char* dir)
 }
 
 
-static void
+char*
 backup_loadSkipFile(const char* filename)
 {
   struct stat st;
@@ -261,11 +259,11 @@ backup_loadSkipFile(const char* filename)
   }
 
   int fileLength = st.st_size;
-  backup_skipFile = malloc(fileLength+1);
-  memset(backup_skipFile, 0, fileLength+1);
+  char* skipFile = malloc(fileLength+1);
+  memset(skipFile, 0, fileLength+1);
   int fd = open(filename,  O_RDONLY|_O_BINARY);
   if (fd) {
-    if (read(fd, backup_skipFile, fileLength) != fileLength) {
+    if (read(fd, skipFile, fileLength) != fileLength) {
       close(fd);
       fatalError("failed to read skipfile %s", filename);
     }
@@ -274,6 +272,7 @@ backup_loadSkipFile(const char* filename)
   }
 
   close(fd);
+  return skipFile;
 }
 
 
@@ -334,8 +333,10 @@ backup_main(int argc, char* argv[])
   }
 
   if (skipfile) {
-    backup_loadSkipFile(skipfile);
+    backup_skipFile = backup_loadSkipFile(skipfile);
   }
+
+  util_connect(hostname);
 
   char* token = strtok(path, ":");
   char* dir = 0;
@@ -367,7 +368,6 @@ backup_main(int argc, char* argv[])
   }
 
   if (dir) {
-    util_connect(hostname);
     backup_backupDir(dir);
   }
 

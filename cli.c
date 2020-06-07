@@ -266,8 +266,7 @@ cli_saveFileIfModified(cli_hostfile_t* file)
   if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
     success = squirt_file(file->localFilename, file->remoteFilename, 1, 0) == 0;
     if (success) {
-      dir_datestamp_t dateStamp = {0};
-      success = protect_file(file->remoteFilename, file->remoteProtection, &dateStamp);
+      success = protect_file(file->remoteFilename, file->remoteProtection, 0);
     }
   }
 

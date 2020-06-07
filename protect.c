@@ -20,6 +20,11 @@ protect_cleanup(void)
 int
 protect_file(const char* filename, uint32_t protection, dir_datestamp_t* dateStamp)
 {
+  dir_datestamp_t _dateStamp = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+  if (dateStamp == 0) {
+    dateStamp = &_dateStamp;
+  }
+
   if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_SET_INFO) != 0) {
     fatalError("failed to connect to squirtd server");
   }

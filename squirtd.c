@@ -279,10 +279,8 @@ file_setInfo(int fd, const char* filename)
   squirtd_file_info_t info;
   int len;
   if ((len = recv(fd, &info, sizeof(info), 0)) == sizeof(info)) {
-    if (info.protection) {
-      SetProtection((STRPTR)filename, info.protection);
-    }
-    if (info.dateStamp.ds_Days) {
+    SetProtection((STRPTR)filename, info.protection);
+    if ((uint32_t)info.dateStamp.ds_Days != 0xFFFFFFFF) {
       SetFileDate((STRPTR)filename, &info.dateStamp);
     }
   }
@@ -451,7 +449,7 @@ main(int argc, char **argv)
   setsockopt(squirtd_connectionFd, SOL_SOCKET, SO_RCVTIMEO, (char*)&socketTimeout, sizeof(socketTimeout));
 
  again:
-  printf("waiting for command...\n");
+  //  printf("waiting for command...\n");
   squirtd_error = 0;
 
   struct {

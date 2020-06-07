@@ -15,8 +15,15 @@
 #include "common.h"
 #include "exall.h"
 
+typedef enum {
+  UPDATE_NOUPDATE,
+  UPDATE_CREATE,
+  UPDATE_EXALL,
+} restore_update_t;
+
 static char* restore_currentDir = 0;
 static char* restore_dirBuffer = 0;
+static char* restore_skipFile = 0;
 
 static void
 restore_restoreDir(const char* remote);
@@ -33,6 +40,12 @@ restore_cleanup()
     free(restore_dirBuffer);
     restore_dirBuffer = 0;
   }
+
+  if (restore_skipFile) {
+    free(restore_skipFile);
+    restore_skipFile = 0;
+  }
+
 }
 
 
@@ -107,9 +120,28 @@ restore_popDir(char* cwd)
   free((void*)cwd);
 }
 
+
 static int
-restore_remoteFilePresent(const char* filename, int isDir, dir_entry_t* list)
+restore_updateExAll(const char* filename, const char* path)
 {
+  dir_entry_t *temp = dir_newDirEntry();
+  if (!exall_readExAllData(temp, filename)) {
+    fatalError("unabled to read exall data for %s\n", filename);
+  }
+
+  printf("set: %d %d %d\n", temp->ds.days, temp->ds.mins, temp->ds.ticks);
+  int error =  protect_file(path, temp->prot, &temp->ds);
+
+  dir_freeEntry(temp);
+
+  return error;
+}
+
+
+static restore_update_t
+restore_remoteFileNeedsUpdating(const char* filename, int isDir, dir_entry_t* list)
+{
+  restore_update_t update = UPDATE_NOUPDATE;
   int found = 0;
   dir_entry_t* entry = list;
 
@@ -129,17 +161,19 @@ restore_remoteFilePresent(const char* filename, int isDir, dir_entry_t* list)
 	if (!exall_readExAllData(temp, filename)) {
 	  fatalError("unabled to read exall data for %s\n", filename);
 	}
-	 found = exall_identicalExAllData(temp, entry);
-      } else {
-	printf("filesize doesn't match %s %d %d\n", filename, (int)st.st_size, entry->size);
+	if (!exall_identicalExAllData(temp, entry)) {
+	  update = UPDATE_EXALL;
+	}
       }
     } else {
       fatalError("unable to read %s\n", filename);
     }
     dir_freeEntry(temp);
+  } else {
+    update = UPDATE_CREATE;
   }
 
-  return found;
+  return update;
 }
 
 static void
@@ -156,16 +190,43 @@ restore_operation(const char* filename, void* data)
   char* path = restore_fullPath(filename);
 
   int isDir = util_isDirectory(filename);
-  int needsUpdate = restore_remoteFilePresent(filename, isDir, entry);
+  restore_update_t update = restore_remoteFileNeedsUpdating(filename, isDir, entry);
 
   if (isDir) {
-    if (!needsUpdate) {
-      printf("%d: DIR: %s %s\n", needsUpdate, filename, path);
+    switch (update) {
+    case UPDATE_CREATE:
+      printf("Creating DIR: %s %s\n", filename, path);
+      char buffer[PATH_MAX];
+      snprintf(buffer, sizeof(buffer), "makedir \"%s\"", filename);
+      if (util_exec(buffer) != 0) {
+	fprintf(stderr, "failed to create %s\n", filename);
+      }
+      break;
+    case UPDATE_EXALL:
+      printf("Updating INFO: %s %s\n", filename, path);
+      if (restore_updateExAll(filename, path) != 0) {
+	fatalError("failed to update ExAll for %s", filename);
+      }
+      break;
+    case UPDATE_NOUPDATE:
+      //     printf("%s - updated\n", path);
+      break;
     }
     restore_restoreDir(filename);
   } else {
-    if (!needsUpdate) {
-      printf("%d: FILE: %s %s\n", needsUpdate, filename, path);
+    switch (update) {
+    case UPDATE_CREATE:
+      printf("Creating FILE: %s %s\n", filename, path);
+      break;
+    case UPDATE_EXALL:
+      printf("Updating INFO: %s %s\n", filename, path);
+      if (restore_updateExAll(filename, path) != 0) {
+	fatalError("failed to update ExAll for %s", filename);
+      }
+      break;
+    case UPDATE_NOUPDATE:
+      //      printf("%s - updated\n", path);
+      break;
     }
   }
 
@@ -182,7 +243,9 @@ restore_list(dir_entry_list_t* list)
   while (entry) {
     struct stat st;
     if (stat(entry->name, &st) != 0) {
-      printf("PROB NEEDS DELETING %s\n", entry->name);
+      char* path = restore_fullPath(entry->name);
+      printf("PROB NEEDS DELETING %s (%s) (%s)\n", path, entry->name, getcwd(0, 0));
+      free(path);
     }
     entry = entry->next;
   }
@@ -212,7 +275,7 @@ restore_main(int argc, char* argv[])
 {
   const char* hostname = 0;
   char* path = 0;
-  char* skipfile = 0;
+  char* skipFile = 0;
 
 
   while (optind < argc) {
@@ -233,7 +296,7 @@ restore_main(int argc, char* argv[])
 	if (optarg == 0 || strlen(optarg) == 0) {
 	  restore_usage();
 	}
-	skipfile = optarg;
+	skipFile = optarg;
 	break;
       case '?':
       default:
@@ -254,6 +317,11 @@ restore_main(int argc, char* argv[])
     restore_usage();
   }
 
+  if (skipFile) {
+    restore_skipFile = backup_loadSkipFile(skipFile);
+  }
+
+  util_connect(hostname);
 
   char* token = strtok(path, ":");
   char* dir = 0;
@@ -288,7 +356,6 @@ restore_main(int argc, char* argv[])
   printf("cwd = %s\n",  getcwd(0, 0));
 
   if (dir) {
-    util_connect(hostname);
     restore_restoreDir(dir);
   }
 

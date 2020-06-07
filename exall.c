@@ -172,20 +172,20 @@ exall_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 
 #if 0
   if (!identical) {
-    printf(">%s<>%s< %d\n", one->name, two->name, strcmp(one->name, two->name) );
-    printf("%d %d\n", one->comment == 0, two->comment == 0);
+    printf("name: >%s<>%s< %d\n", one->name, two->name, strcmp(one->name, two->name) );
+    printf("comment: %d %d\n", one->comment == 0, two->comment == 0);
     if (one->comment != 0) {
-      printf("1:>%s<\n", one->comment);
+      printf("comment 1:>%s<\n", one->comment);
     }
     if (two->comment != 0) {
-      printf("2:>%s<\n", two->comment);
+      printf("comment 2:>%s<\n", two->comment);
     }
-    printf("%d %d %d\n", one->type, two->type, one->type == two->type);
-    printf("%d %d %d\n", one->size, two->size, one->size == two->size);
-    printf("%d %d %d\n", one->prot, two->prot, one->prot == two->prot);
-    printf("%d %d %d\n", one->ds.days, two->ds.days, one->ds.days == two->ds.days);
-    printf("%d %d %d\n", one->ds.mins, two->ds.mins, one->ds.mins == two->ds.mins);
-    printf("%d %d %d\n", one->ds.ticks, two->ds.ticks, one->ds.ticks == two->ds.ticks);
+    printf("type %d %d %d\n", one->type, two->type, one->type == two->type);
+    printf("size %d %d %d\n", one->size, two->size, one->size == two->size);
+    printf("prot %d %d %d\n", one->prot, two->prot, one->prot == two->prot);
+    printf("days %d %d %d\n", one->ds.days, two->ds.days, one->ds.days == two->ds.days);
+    printf("mins %d %d %d\n", one->ds.mins, two->ds.mins, one->ds.mins == two->ds.mins);
+    printf("ticks %d %d %d\n", one->ds.ticks, two->ds.ticks, one->ds.ticks == two->ds.ticks);
   }
 #endif
 
