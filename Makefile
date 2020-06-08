@@ -1,19 +1,17 @@
-CC=gcc
+include platforms.mk
 
-UNAME_S := $(shell uname -s)
-UNAME_M := $(shell uname -m)
-ifeq ($(UNAME_S),Darwin)
+ifeq ($(PLATFORM),osx)
+# OSX
+CC=gcc
 ICONV_LIB=-liconv
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined 
-endif
-ifeq ($(UNAME_S),Linux)
-ifeq (,$(findstring "arm",$(UNAME_M)))
+else ifeq ($(PLATFORM),raspberry_pi)
+# Raspberry Pi
 CC=gcc
-STATIC_ANALYZE=
 else
+# Linux
 CC=gcc-10
 STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined 
-endif
 endif
 
 SQUIRTD_SRCS=squirtd.c
