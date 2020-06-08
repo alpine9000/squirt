@@ -129,7 +129,8 @@ restore_updateExAll(const char* filename, const char* path)
     fatalError("unabled to read exall data for %s\n", filename);
   }
 
-  printf("set: %d %d %d\n", temp->ds.days, temp->ds.mins, temp->ds.ticks);
+
+  printf("set: %s %d %d %d\n", dir_formatDateTime(temp), temp->ds.days, temp->ds.mins, temp->ds.ticks);
   int error =  protect_file(path, temp->prot, &temp->ds);
 
   dir_freeEntry(temp);
@@ -209,7 +210,7 @@ restore_operation(const char* filename, void* data)
       }
       break;
     case UPDATE_NOUPDATE:
-      //     printf("%s - updated\n", path);
+      //printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
       break;
     }
     restore_restoreDir(filename);
@@ -217,6 +218,9 @@ restore_operation(const char* filename, void* data)
     switch (update) {
     case UPDATE_CREATE:
       printf("Creating FILE: %s %s\n", filename, path);
+      if (squirt_file(filename, path, 1, 1) != 0) {
+	fatalError("failed to restore %s\n", path);
+      }
       break;
     case UPDATE_EXALL:
       printf("Updating INFO: %s %s\n", filename, path);
@@ -226,6 +230,7 @@ restore_operation(const char* filename, void* data)
       break;
     case UPDATE_NOUPDATE:
       //      printf("%s - updated\n", path);
+      //      printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
       break;
     }
   }
