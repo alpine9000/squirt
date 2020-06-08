@@ -17,7 +17,9 @@ exall_scanString(FILE* fp)
   int c = fscanf(fp, "%*[^:]:%107[^\n]%*c", buffer);
   if (c == 1) {
     char* str = malloc(strlen(buffer)+1);
-    strcpy(str, buffer);
+    if (str) {
+      strcpy(str, buffer);
+    }
     return str;
   } else {
     return 0;
@@ -59,7 +61,9 @@ exall_scanComment(FILE* fp)
   char* comment = 0;
   if (strlen(buffer) > 0) {
     comment = malloc(strlen(buffer)+1);
-    strcpy((char*)comment, buffer);
+    if (comment) {
+      strcpy((char*)comment, buffer);
+    }
   }
 
   return comment;
@@ -73,6 +77,9 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   util_mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
+  if (!name) {
+    return 0;
+  }
   sprintf(name, "%s%s", ident, baseName);
   FILE *fp = fopen(name, "w");
 
@@ -134,6 +141,9 @@ exall_readExAllData(dir_entry_t* entry, const char* path)
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   util_mkdir(ident, 0777);
   char* name = malloc(strlen(baseName)+1+strlen(ident));
+  if (!name) {
+    return 0;
+  }
   sprintf(name, "%s%s", ident, baseName);
   FILE *fp = fopen(name, "r+");
   if (!fp) {

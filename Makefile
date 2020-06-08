@@ -18,6 +18,7 @@ SQUIRTD_SRCS=squirtd.c
 SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
 HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h
+COMMON_DEPS=Makefile platforms.mk mingw.mk
 
 VBCC_CC=vc
 AMIGA_GCC_PREFIX=/usr/local/amiga/bebbo
@@ -50,15 +51,15 @@ build/squirt: $(SQUIRT_OBJS)
 build/squirt_%: $(SQUIRT_OBJS)
 	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_$* $(LIBS)
 
-build/obj/%.o: %.c $(HEADERS) common.h Makefile
+build/obj/%.o: %.c $(HEADERS) $(COMMON_DEPS)
 	@mkdir -p build/obj
 	$(CC) -c $(CFLAGS) $*.c -o build/obj/$*.o
 
-build/obj/amiga/%.o: %.c common.h  Makefile
+build/obj/amiga/%.o: %.c $(COMMON_DEPS)
 	@mkdir -p build/obj/amiga
 	vc -c $(VBCC_CFLAGS) $*.c -c -o build/obj/amiga/$*.o
 
-build/obj/amiga.gcc/%.o: %.c common.h Makefile
+build/obj/amiga.gcc/%.o: %.c $(COMMON_DEPS)
 	@mkdir -p build/obj/amiga.gcc
 	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) $*.c -c -o build/obj/amiga.gcc/$*.o
 

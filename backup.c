@@ -260,18 +260,20 @@ backup_loadSkipFile(const char* filename)
 
   int fileLength = st.st_size;
   char* skipFile = malloc(fileLength+1);
-  memset(skipFile, 0, fileLength+1);
-  int fd = open(filename,  O_RDONLY|_O_BINARY);
-  if (fd) {
-    if (read(fd, skipFile, fileLength) != fileLength) {
-      close(fd);
-      fatalError("failed to read skipfile %s", filename);
+  if (skipFile) {
+    memset(skipFile, 0, fileLength+1);
+    int fd = open(filename,  O_RDONLY|_O_BINARY);
+    if (fd) {
+      if (read(fd, skipFile, fileLength) != fileLength) {
+	close(fd);
+	fatalError("failed to read skipfile %s", filename);
+      }
+    } else {
+      fatalError("failed to open skipfile %s", filename);
     }
-  } else {
-    fatalError("failed to open skipfile %s", filename);
+    
+    close(fd);
   }
-
-  close(fd);
   return skipFile;
 }
 
