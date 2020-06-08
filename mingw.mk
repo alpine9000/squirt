@@ -1,10 +1,8 @@
 MINGW_GCC_PREFIX=/usr/local/mingw
 MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
-
-MINGW_LIBS=-lws2_32 -liconv -lreadline
 MINGW_GCC_CFLAGS=-O2 $(WARNINGS) -I/$(MINGW_GCC_PREFIX)/include
-SQUIRT_MINGW_OBJS=$(addprefix build/obj/mingw/, $(SQUIRT_SRCS:.c=.o))
 MINGW_APPS=$(addsuffix .exe, $(addprefix build/mingw/, $(CLIENT_APPS)))
+SQUIRT_MINGW_OBJS=$(addprefix build/obj/mingw/, $(SQUIRT_SRCS:.c=.o))
 
 mingw: $(MINGW_APPS) build/mingw/libreadline8.dll build/mingw/libiconv-2.dll
 

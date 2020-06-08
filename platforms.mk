@@ -4,6 +4,7 @@ UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
 PLATFORM=osx
 endif
+
 ifeq ($(UNAME_S),Linux)
 ifneq (,$(findstring arm,$(UNAME_M)))
 PLATFORM=raspberry_pi
@@ -11,3 +12,8 @@ else
 PLATFORM=linux
 endif
 endif
+
+ifneq ($(UNAME_S),MINGW64)
+PLATFORM=mingw64
+endif
+

@@ -1,22 +1,32 @@
 include platforms.mk
 
+CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
+MINGW_LIBS=-lws2_32 -liconv -lreadline
+
 ifeq ($(PLATFORM),osx)
 # OSX
 CC=gcc
-ICONV_LIB=-liconv
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined 
+LIBS=-liconv -lreadline
 else ifeq ($(PLATFORM),raspberry_pi)
 # Raspberry Pi
 CC=gcc
-else
+LIBS=-lreadline
+else ifeq ($(PLATFORM),linux)
 # Linux
 CC=gcc-10
-STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined 
+STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined
+LIBS=-lreadline
+else ifeq ($(PLATFORM),mingw64)
+# Mingw64
+CC=gcc
+CLIENT_APPS:=$(addsuffix .exe, $(CLIENT_APPS))
+LIBS=$(MINGW_LIBS)
+STATIC_ANALYZE=
 endif
 
 SQUIRTD_SRCS=squirtd.c
 SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c
-CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
 HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h
 COMMON_DEPS=Makefile platforms.mk mingw.mk
 
@@ -31,7 +41,6 @@ CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
 AMIGA_GCC_CFLAGS=-fwhole-program -msmall-code -Os -fomit-frame-pointer -noixemul $(WARNINGS)
 VBCC_CFLAGS=-O1 +aos68k -c99
 
-LIBS=$(ICONV_LIB) -lreadline
 
 SQUIRTD_AMIGA_OBJS=$(addprefix build/obj/amiga/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRTD_AMIGA_GCC_OBJS= $(addprefix build/obj/amiga.gcc/, $(SQUIRTD_SRCS:.c=.o))
