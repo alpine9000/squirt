@@ -54,11 +54,9 @@ all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
 
 client: $(HOST_CLIENT_APPS)
 
-build/squirt: $(SQUIRT_OBJS)
-	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt $(LIBS)
 
-build/squirt_%: $(SQUIRT_OBJS)
-	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt_$* $(LIBS)
+build/squirt%: $(SQUIRT_OBJS)
+	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt$* $(LIBS)
 
 build/obj/%.o: %.c $(HEADERS) $(COMMON_DEPS)
 	@mkdir -p build/obj

@@ -13,7 +13,7 @@ PLATFORM=linux
 endif
 endif
 
-ifneq (,$(findstring MINGW64,$(UNAME_M)))
+ifneq (,$(findstring MINGW64,$(UNAME_S)))
 PLATFORM=mingw64
 endif
 
