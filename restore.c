@@ -276,9 +276,9 @@ restore_main(int argc, char* argv[])
   const char* hostname = 0;
   char* path = 0;
   char* skipFile = 0;
+  int argvIndex = 1;
 
-
-  while (optind < argc) {
+  while (argvIndex < argc) {
     static struct option long_options[] =
       {
        //    {"prune",    no_argument, &restore_prune, 'p'},
@@ -286,9 +286,10 @@ restore_main(int argc, char* argv[])
        {0, 0, 0, 0}
       };
     int option_index = 0;
-    char c = getopt_long (argc, argv, "", long_options, &option_index);
+    int c = getopt_long (argc, argv, "", long_options, &option_index);
 
     if (c != -1) {
+      argvIndex = optind;
       switch (c) {
       case 0:
 	break;
@@ -305,10 +306,11 @@ restore_main(int argc, char* argv[])
       }
     } else {
       if (hostname == 0) {
-	hostname = argv[optind];
+	hostname = argv[argvIndex];
       } else {
-	path = argv[optind];
+	path = argv[argvIndex];
       }
+      argvIndex++;
       optind++;
     }
   }
