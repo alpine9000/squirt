@@ -1,4 +1,4 @@
-* Building a Windows version on Linux
+# Building a Windows version on Linux
 
 1. x86_64-w64-mingw32
 ```
