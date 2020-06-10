@@ -1,5 +1,4 @@
-MINGW_GCC_PREFIX=/usr/local/mingw
-MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
+
 MINGW_GCC_CFLAGS=-O2 $(WARNINGS) -I/$(MINGW_GCC_PREFIX)/include
 MINGW_APPS=$(addsuffix .exe, $(addprefix build/mingw/, $(CLIENT_APPS)))
 SQUIRT_MINGW_OBJS=$(addprefix build/obj/mingw/, $(SQUIRT_SRCS:.c=.o))

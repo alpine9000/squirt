@@ -8,6 +8,8 @@ ifeq ($(PLATFORM),osx)
 CC=gcc
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined 
 LIBS=-liconv -lreadline
+MINGW_GCC_PREFIX=/usr/local/mingw
+MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
 else ifeq ($(PLATFORM),raspberry_pi)
 # Raspberry Pi
 CC=gcc
@@ -17,6 +19,8 @@ else ifeq ($(PLATFORM),linux)
 CC=gcc-10
 STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined
 LIBS=-lreadline
+MINGW_GCC_PREFIX=/usr/x86_64-w64-mingw32
+MINGW_GCC=x86_64-w64-mingw32-gcc
 else ifeq ($(PLATFORM),mingw64)
 # Mingw64
 CC=gcc
