@@ -24,6 +24,7 @@ typedef enum {
 static char* restore_currentDir = 0;
 static char* restore_dirBuffer = 0;
 static char* restore_skipFile = 0;
+static int restore_quiet = 0;
 
 static void
 restore_restoreDir(const char* remote);
@@ -129,11 +130,18 @@ restore_updateExAll(const char* filename, const char* path)
     fatalError("unabled to read exall data for %s\n", filename);
   }
 
-
-  printf("set: %s %d %d %d\n", dir_formatDateTime(temp), temp->ds.days, temp->ds.mins, temp->ds.ticks);
   int error =  protect_file(path, temp->prot, &temp->ds);
 
-  dir_freeEntry(temp);
+  if (temp->comment && strlen(temp->comment) > 0) {
+    char buffer[PATH_MAX];
+    snprintf(buffer, sizeof(buffer), "filenote \"%s\" \"%s\"", path, temp->comment);
+    if (util_exec(buffer) != 0) {
+      fprintf(stderr, "failed to set comment %s\n", filename);
+    }
+  }
+
+    dir_freeEntry(temp);
+
 
   return error;
 }
@@ -160,11 +168,13 @@ restore_remoteFileNeedsUpdating(const char* filename, int isDir, dir_entry_t* li
     if (stat(filename, &st) == 0) {
       if (isDir || st.st_size == (off_t)entry->size) {
 	if (!exall_readExAllData(temp, filename)) {
-	  fatalError("unabled to read exall data for %s\n", filename);
+	  fatalError("unable to read exall data for %s\n", filename);
 	}
 	if (!exall_identicalExAllData(temp, entry)) {
 	  update = UPDATE_EXALL;
 	}
+      } else if (st.st_size != (off_t)entry->size) {
+	update = UPDATE_CREATE;
       }
     } else {
       fatalError("unable to read %s\n", filename);
@@ -175,6 +185,37 @@ restore_remoteFileNeedsUpdating(const char* filename, int isDir, dir_entry_t* li
   }
 
   return update;
+}
+
+void
+restore_printProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength)
+{
+  (void)start;
+  int percentage;
+
+  if (fileLength) {
+    percentage = (total*100)/fileLength;
+  } else {
+    percentage = 100;
+  }
+
+#ifndef _WIN32
+  printf("\r%c[K", 27);
+#else
+  printf("\r");
+#endif
+  fflush(stdout);
+  if (percentage >= 100) {
+    printf("\xE2\x9C\x85 "); // utf-8 tick
+  } else {
+    printf("\xE2\x8C\x9B "); // utf-8 hourglass
+  }
+
+  printf("%s %3d%% ", filename, percentage);
+
+#ifndef _WIN32
+  fflush(stdout);
+#endif
 }
 
 static void
@@ -193,43 +234,61 @@ restore_operation(const char* filename, void* data)
   restore_update_t update = restore_remoteFileNeedsUpdating(filename, isDir, entry);
 
   if (isDir) {
+    if (update == UPDATE_CREATE) {
+      char buffer[PATH_MAX];
+      snprintf(buffer, sizeof(buffer), "makedir \"%s\"", path);
+      if (util_exec(buffer) != 0) {
+	fatalError("failed to create %s", filename);
+      }
+    }
+    restore_restoreDir(filename);
     switch (update) {
     case UPDATE_CREATE:
-      printf("Creating DIR: %s %s\n", filename, path);
-      char buffer[PATH_MAX];
-      snprintf(buffer, sizeof(buffer), "makedir \"%s\"", filename);
-      if (util_exec(buffer) != 0) {
-	fprintf(stderr, "failed to create %s\n", filename);
-      }
-      break;
     case UPDATE_EXALL:
-      printf("Updating INFO: %s %s\n", filename, path);
+      printf("\xE2\x8C\x9B %s restoring...", path); // utf-8 hourglass
+      fflush(stdout);
+
       if (restore_updateExAll(filename, path) != 0) {
 	fatalError("failed to update ExAll for %s", filename);
       }
+#ifndef _WIN32
+	printf("\r%c[K", 27);
+#else
+	printf("\r");
+#endif
+	printf("\xE2\x9C\x85 %s restoring...done\n", path); // utf-8 tick
       break;
     case UPDATE_NOUPDATE:
-      //printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+      if (!restore_quiet) {
+	printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+      }
       break;
     }
-    restore_restoreDir(filename);
   } else {
     switch (update) {
     case UPDATE_CREATE:
-      printf("Creating FILE: %s %s\n", filename, path);
-      if (squirt_file(filename, path, 1, 1) != 0) {
+    case UPDATE_EXALL:
+      printf("\xE2\x8C\x9B %s restoring...", path); // utf-8 hourglass
+      fflush(stdout);
+      char updateMessage[PATH_MAX];
+      snprintf(updateMessage, sizeof(updateMessage), "%s restoring...", path);
+      if (squirt_file(filename, updateMessage, path, 1, restore_printProgress) != 0) {
 	fatalError("failed to restore %s\n", path);
       }
-      break;
-    case UPDATE_EXALL:
-      printf("Updating INFO: %s %s\n", filename, path);
       if (restore_updateExAll(filename, path) != 0) {
 	fatalError("failed to update ExAll for %s", filename);
       }
+#ifndef _WIN32
+	printf("\r%c[K", 27);
+#else
+	printf("\r");
+#endif
+	printf("\xE2\x9C\x85 %s restoring...done\n", path); // utf-8 tick
       break;
     case UPDATE_NOUPDATE:
-      //      printf("%s - updated\n", path);
-      //      printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+      if (!restore_quiet) {
+	printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+      }
       break;
     }
   }
@@ -237,6 +296,22 @@ restore_operation(const char* filename, void* data)
   free(path);
 }
 
+
+static int
+restore_skip(const char* filename)
+{
+  int skipFile = 0;
+  if (restore_skipFile) {
+    const char* path = restore_fullPath(filename);
+    char* found = strstr(restore_skipFile, path);
+    if (found) {
+      found += strlen(path);
+      skipFile = *found == 0 || *found == '\n' || *found == '\r';
+    }
+    free((void*)path);
+  }
+  return skipFile;
+}
 
 static void
 restore_list(dir_entry_list_t* list)
@@ -246,10 +321,16 @@ restore_list(dir_entry_list_t* list)
   dir_entry_t* entry = list->head;
   while (entry) {
     struct stat st;
-    if (stat(entry->name, &st) != 0) {
-      char* path = restore_fullPath(entry->name);
-      printf("PROB NEEDS DELETING %s (%s) (%s)\n", path, entry->name, getcwd(0, 0));
-      free(path);
+    if (!restore_skip(entry->name)) {
+      if (stat(entry->name, &st) != 0) {
+	char* path = restore_fullPath(entry->name);
+	char* cwd = getcwd(0, 0);
+	if (!cwd) {
+	  perror("cwd failed");
+	}
+	printf("PROB NEEDS DELETING %s (%s) (%s)\n", path, entry->name, cwd);
+	free(path);
+      }
     }
     entry = entry->next;
   }
@@ -285,7 +366,7 @@ restore_main(int argc, char* argv[])
   while (argvIndex < argc) {
     static struct option long_options[] =
       {
-       //    {"prune",    no_argument, &restore_prune, 'p'},
+       {"quiet",    no_argument, &restore_quiet, 'q'},
        {"skipfile", required_argument, 0, 's'},
        {0, 0, 0, 0}
       };
@@ -325,6 +406,8 @@ restore_main(int argc, char* argv[])
 
   if (skipFile) {
     restore_skipFile = backup_loadSkipFile(skipFile, 0);
+  } else {
+    restore_skipFile = backup_loadSkipFile(".skip", 1);
   }
 
   util_connect(hostname);
@@ -358,13 +441,9 @@ restore_main(int argc, char* argv[])
     }
   }
 
-  printf("dir = %s\n", dir);
-  printf("cwd = %s\n",  getcwd(0, 0));
-
   if (dir) {
     restore_restoreDir(dir);
   }
-
 
   printf("\nrestore complete!\n");
 }

@@ -300,8 +300,9 @@ util_printFormatSpeed(int32_t size, double elapsed)
 
 
 void
-util_printProgress(struct timeval* start, uint32_t total, uint32_t fileLength)
+util_printProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength)
 {
+  (void)filename;
   int percentage;
 
   if (fileLength) {

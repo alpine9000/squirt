@@ -29,7 +29,7 @@ suck_cleanup(void)
 
 
 int32_t
-squirt_suckFile(const char* filename, int progress, const char* destFilename, uint32_t* protection)
+squirt_suckFile(const char* filename, const char* progressHeader,  void (*progress)(const char* progressHeader, struct timeval* start, uint32_t total, uint32_t fileLength), const char* destFilename, uint32_t* protection)
 {
   int32_t total = 0;
 
@@ -78,7 +78,7 @@ squirt_suckFile(const char* filename, int progress, const char* destFilename, ui
   suck_readBuffer = malloc(BLOCK_SIZE);
 
   if (fileLength > 0) {
-    if (progress) {
+    if (progress == util_printProgress) {
       printf("sucking %s (%s bytes)\n", filename, util_formatNumber(fileLength));
     }
 
@@ -98,7 +98,7 @@ squirt_suckFile(const char* filename, int progress, const char* destFilename, ui
 	fatalError("\nfailed to read");
       } else {
 	if (progress) {
-	  util_printProgress(&suck_start, total, fileLength);
+	  progress(progressHeader ? progressHeader : filename, &suck_start, total, fileLength);
 	}
 	int readLen;
 	if ((readLen = write(suck_fileFd, suck_readBuffer, len)) != len) {
@@ -110,7 +110,7 @@ squirt_suckFile(const char* filename, int progress, const char* destFilename, ui
     } while (total < fileLength);
 
     if (progress) {
-      util_printProgress(&suck_start, total, fileLength);
+      progress(progressHeader ? progressHeader : filename, &suck_start, total, fileLength);
       fflush(stdout);
     }
   } else {
@@ -125,7 +125,7 @@ squirt_suckFile(const char* filename, int progress, const char* destFilename, ui
 
   if (error) {
     total = -error;
-    if (progress) {
+    if (progress == util_printProgress) {
       fatalError("failed to suck file %s", filename);
     }
   }
@@ -146,7 +146,7 @@ suck_main(int argc, char* argv[])
   util_connect(argv[1]);
 
   uint32_t protection;
-  int32_t length = squirt_suckFile(argv[2], 1, 0, &protection);
+  int32_t length = squirt_suckFile(argv[2], 0, util_printProgress, 0, &protection);
 
   struct timeval end;
 

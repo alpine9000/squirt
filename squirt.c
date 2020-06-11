@@ -30,7 +30,7 @@ squirt_cleanup(void)
 
 
 int
-squirt_file(const char* filename, const char* destFilename, int writeToCurrentDir, int progress)
+squirt_file(const char* filename, const char* progressHeader, const char* destFilename, int writeToCurrentDir, void (*progress)(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength))
 {
   int total = 0;
   int32_t fileLength;
@@ -72,7 +72,7 @@ squirt_file(const char* filename, const char* destFilename, int writeToCurrentDi
 
   squirt_readBuffer = malloc(BLOCK_SIZE);
 
-  if (progress) {
+  if (progress == util_printProgress) {
     printf("squirting %s (%s bytes)\n", filename, util_formatNumber(fileLength));
     gettimeofday(&start, NULL);
   }
@@ -89,15 +89,15 @@ squirt_file(const char* filename, const char* destFilename, int writeToCurrentDi
       total += len;
       //      if (((((old*100)/fileLength))/100) - (((total*100)/fileLength)/100) > 2) {
       if (progress) {
-	util_printProgress(&start, total, fileLength);
+	progress(progressHeader ? progressHeader : filename, &start, total, fileLength);
       }
 	//      }
     }
 
   } while (total < fileLength);
 
-  if (progress) {
-    util_printProgress(&start, total, fileLength);
+  if (progress == util_printProgress) {
+    util_printProgress(progressHeader ? progressHeader :filename, &start, total, fileLength);
   }
 
   uint32_t error;
@@ -107,7 +107,7 @@ squirt_file(const char* filename, const char* destFilename, int writeToCurrentDi
   }
 
   if (error == 0) {
-    if (progress) {
+    if (progress == util_printProgress) {
       gettimeofday(&end, NULL);
       long seconds = end.tv_sec - start.tv_sec;
       long micros = ((seconds * 1000000) + end.tv_usec) - start.tv_usec;
@@ -118,6 +118,8 @@ squirt_file(const char* filename, const char* destFilename, int writeToCurrentDi
   } else {
     fprintf(stderr, "\n**FAILED** to squirt %s\n%s\n", filename, util_getErrorString(error));
   }
+
+  squirt_cleanup();
 
   return error;
 }
@@ -131,5 +133,5 @@ squirt_main(int argc, char* argv[])
   }
 
   util_connect(argv[1]);
-  squirt_file(argv[2], 0, 0, 1);
+  squirt_file(argv[2], 0, 0, 0, util_printProgress);
 }

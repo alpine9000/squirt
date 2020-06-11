@@ -135,7 +135,11 @@ backup_backupList(dir_entry_list_t* list)
 	}
       } else {
 	uint32_t protect;
-	if (squirt_suckFile(path, 1, 0, &protect) < 0) {
+
+	char updateMessage[PATH_MAX];
+	snprintf(updateMessage, sizeof(updateMessage), "%s saving...", path);
+
+	if (squirt_suckFile(path, updateMessage, restore_printProgress, 0, &protect) < 0) {
 	  /*
 	    FILE* fp = fopen("skip-entry", "wb+");
 	    fprintf(fp, "%s\n", path);
@@ -144,7 +148,12 @@ backup_backupList(dir_entry_list_t* list)
 	    fatalError("failed to backup %s", path);
 	}
 	exall_saveExAllData(entry, path);
-	printf("\n");
+#ifndef _WIN32
+	printf("\r%c[K", 27);
+#else
+	printf("\r");
+#endif
+	printf("\xE2\x9C\x85 %s saving...done\n", path); // utf-8 tick
 	fflush(stdout);
       }
       free((void*)path);

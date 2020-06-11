@@ -234,7 +234,7 @@ cli_convertFileToHost(cli_hostfile_t** list, const char* remote)
   util_mkpath(file->localFilename);
 
   memset(&file->dateStamp, 0, sizeof(file->dateStamp));
-  int error = squirt_suckFile(file->remoteFilename, 0, file->localFilename, &file->remoteProtection);
+  int error = squirt_suckFile(file->remoteFilename, 0, 0, file->localFilename, &file->remoteProtection);
   if (error == -ERROR_SUCK_ON_DIR) {
     fprintf(stderr, "error: failed to access remote directory %s\n", file->remoteFilename);
     free(file);
@@ -264,7 +264,7 @@ cli_saveFileIfModified(cli_hostfile_t* file)
 {
   int success = 0;
   if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
-    success = squirt_file(file->localFilename, file->remoteFilename, 1, 0) == 0;
+    success = squirt_file(file->localFilename, 0, file->remoteFilename, 1, 0) == 0;
     if (success) {
       success = protect_file(file->remoteFilename, file->remoteProtection, 0);
     }
