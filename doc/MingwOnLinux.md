@@ -34,7 +34,7 @@
    tar zxfv readline-8.0.tar.gz
    cd readline-8.0
    ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32
-   sudu make install
+   sudo make install
 ```
 6. squirt
 ```
