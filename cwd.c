@@ -41,7 +41,7 @@ cwd_read(void)
 
   uint32_t error;
   if (util_recvU32(main_socketFd, &error) != 0) {
-    fatalError("squirt: failed to read remote status");
+    fatalError("cwd: failed to read remote status");
   }
 
   cwd_cleanup();

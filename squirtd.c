@@ -25,7 +25,7 @@ typedef struct {
   struct DateStamp dateStamp;
 } squirtd_file_info_t;
 
-static uint32_t squirtd_error = 0;
+static uint32_t squirtd_execError = 0;
 static int squirtd_listenFd = 0;
 static int squirtd_connectionFd = 0;
 static char* squirtd_filename = 0;
@@ -102,17 +102,21 @@ _fatalError(void)
 }
 
 
-static void
-sendStatus(int fd, uint32_t status)
+static uint32_t
+sendU32(int fd, uint32_t status)
 {
-  send(fd, (void*)&status, sizeof(status), 0);
+  if (send(fd, (void*)&status, sizeof(status), 0) != sizeof(status)) {
+    return ERROR_FATAL_SEND_FAILED;
+  }
+
+  return 0;
 }
 
 
 static void
 exec_runner(void)
 {
-  squirtd_error = SystemTags((APTR)exec_command, SYS_Output, exec_outputFd, TAG_DONE, 0) == 0 ? 0 : ERROR_EXEC_FAILED;
+  squirtd_execError = SystemTags((APTR)exec_command, SYS_Output, exec_outputFd, TAG_DONE, 0) == 0 ? 0 : ERROR_EXEC_FAILED;
 
   if (exec_outputFd) {
     Close(exec_outputFd);
@@ -120,19 +124,20 @@ exec_runner(void)
 }
 
 
-static void
+static uint32_t
 exec_run(int fd, const char* command)
 {
   exec_command = command;
   const char* pipe = "PIPE:";
+  uint32_t error = 0;
 
   if ((exec_outputFd = Open((APTR)pipe, MODE_NEWFILE)) == 0) {
-    squirtd_error = ERROR_FAILED_TO_CREATE_OS_RESOURCE;
+    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
 
   if ((exec_inputFd = Open((APTR)pipe, MODE_OLDFILE)) == 0) {
-    squirtd_error = ERROR_FAILED_TO_CREATE_OS_RESOURCE;
+    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
 
@@ -141,33 +146,42 @@ exec_run(int fd, const char* command)
   char buffer[16];
   int length;
   while ((length = Read(exec_inputFd, buffer, sizeof(buffer))) > 0) {
-    send(fd, buffer, length, 0);
+    if (send(fd, buffer, length, 0) != length) {
+      error = ERROR_FATAL_SEND_FAILED;
+      goto cleanup;
+    }
   }
 
  cleanup:
 
-  // not exit status, sending 4 null bytes breaks out of the terminal read loop in squirt_execCmd
-  // reusing sendStatus for executable size
-  sendStatus(fd, 0);
+  if (!error) {
+    error = squirtd_execError;
+  }
+
+  // sending 4 null bytes breaks out of the terminal read loop in squirt_execCmd
+  if (sendU32(fd, 0) != 0) {
+    error = ERROR_FATAL_SEND_FAILED;
+  }
 
   if (exec_inputFd) {
     Close(exec_inputFd);
   }
+
+  return error;
 }
 
 
-static void
+static uint32_t
 exec_dir(int fd, const char* dir)
 {
   struct ExAllControl*  eac = 0;
   void* data = 0;
+  uint32_t error = 0;
 
   BPTR lock = Lock((APTR)dir, ACCESS_READ);
 
   if (!lock) {
-    squirtd_error = ERROR_FILE_READ_FAILED;
-    uint32_t nameLength = 0;
-    send(fd, (void*)&nameLength, sizeof(nameLength), 0);
+    error = ERROR_FILE_READ_FAILED;
     goto cleanup;
   }
 
@@ -176,7 +190,7 @@ exec_dir(int fd, const char* dir)
   eac = AllocDosObject(DOS_EXALLCONTROL, NULL);
 
   if (!eac) {
-    squirtd_error = ERROR_FAILED_TO_CREATE_OS_RESOURCE;
+    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
 
@@ -206,7 +220,7 @@ exec_dir(int fd, const char* dir)
 	  send(fd, (void*)&ead->ed_Ticks, sizeof(ead->ed_Ticks), 0) != sizeof(ead->ed_Ticks) ||
 	  send(fd, (void*)&commentLength, sizeof(commentLength), 0) != sizeof(commentLength) ||
 	  send(fd, ead->ed_Comment, commentLength, 0) != (int)commentLength) {
-	squirtd_error = ERROR_SEND_FAILED;
+	error = ERROR_FATAL_SEND_FAILED;
 	goto cleanup;
       }
       ead = ead->ed_Next;
@@ -216,7 +230,9 @@ exec_dir(int fd, const char* dir)
 
  cleanup:
 
-  sendStatus(fd, 0xFFFFFFFF); // not status, terminating word
+  if (sendU32(fd, 0xFFFFFFFF) != 0) { ; // not status, terminating word
+    error = ERROR_FATAL_SEND_FAILED;
+  }
 
   if (eac) {
     FreeDosObject(DOS_EXALLCONTROL,eac);
@@ -229,10 +245,12 @@ exec_dir(int fd, const char* dir)
   if (lock) {
     UnLock(lock);
   }
+
+  return error;
 }
 
 
-static void
+static uint32_t
 exec_cwd(int fd)
 {
   char name[108];
@@ -242,19 +260,20 @@ exec_cwd(int fd)
 
   if (send(fd, (void*)&len, sizeof(len), 0) != sizeof(len) ||
       (send(fd, name, len, 0) != len)) {
-    return;
+    return ERROR_FATAL_SEND_FAILED;
   }
+
+  return 0;
 }
 
 
-static void
+static uint32_t
 exec_cd(const char* dir)
 {
   BPTR lock = Lock((APTR)dir, ACCESS_READ);
-  squirtd_error = ERROR_CD_FAILED;
 
   if (!lock) {
-    return;
+    return ERROR_CD_FAILED;
   }
 
   struct FileInfoBlock fileInfo;
@@ -265,71 +284,63 @@ exec_cd(const char* dir)
 
     if (oldLock) {
       UnLock(oldLock);
-      squirtd_error = 0;
     }
+    return 0;
   } else {
     UnLock(lock);
+    return ERROR_CD_FAILED;
   }
 }
 
 
-static void
+static uint32_t
 file_setInfo(int fd, const char* filename)
 {
   squirtd_file_info_t info;
   int len;
   if ((len = recv(fd, &info, sizeof(info), 0)) == sizeof(info)) {
-    SetProtection((STRPTR)filename, info.protection);
-    if ((uint32_t)info.dateStamp.ds_Days != 0xFFFFFFFF) {
-      SetFileDate((STRPTR)filename, &info.dateStamp);
+    if (!SetProtection((STRPTR)filename, info.protection)) {
+      return ERROR_SET_PROTECTION_FAILED;
     }
+    if ((uint32_t)info.dateStamp.ds_Days != 0xFFFFFFFF) {
+      if (!SetFileDate((STRPTR)filename, &info.dateStamp)) {
+	return ERROR_SET_DATESTAMP_FAILED;
+      }
+    }
+    return 0;
   }
+
+  return ERROR_FATAL_RECV_FAILED;
 }
 
 
-static int16_t
-file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCwd)
+static uint32_t
+file_get(int fd)
 {
-  int destFolderLen = strlen(destFolder);
-  int fullPathLen = nameLength+destFolderLen;
-  squirtd_filename = malloc(fullPathLen+1);
-  char* filenamePtr;
-
-  if (writeToCwd) {
-    filenamePtr = squirtd_filename;
-    fullPathLen = nameLength;
-  }  else {
-    strcpy(squirtd_filename, destFolder);
-    filenamePtr = squirtd_filename+destFolderLen;
-  }
-
-  if (recv(fd, filenamePtr, nameLength, 0) != (int)nameLength) {
-    return ERROR_RECV_FAILED;
-  }
-
-  squirtd_filename[fullPathLen] = 0;
-
   int32_t fileLength;
   if (recv(fd, (void*)&fileLength, sizeof(fileLength), 0) != sizeof(fileLength)) {
-    return  ERROR_RECV_FAILED;
+    return ERROR_FATAL_RECV_FAILED;
   }
 
   DeleteFile((APTR)squirtd_filename);
 
   if ((squirtd_outputFd = Open((APTR)squirtd_filename, MODE_NEWFILE)) == 0) {
-    return ERROR_CREATE_FILE_FAILED;
+    return ERROR_FATAL_CREATE_FILE_FAILED;
   }
 
   squirtd_rxBuffer = malloc(BLOCK_SIZE);
-  int total = 0, timeout = 0, length;
+  int total = 0, timeout = 0, length, blockSize = BLOCK_SIZE;
   do {
-    if ((length = recv(fd, (void*)squirtd_rxBuffer, BLOCK_SIZE, 0)) < 0) {
-      return ERROR_RECV_FAILED;
+    if (fileLength-total < BLOCK_SIZE) {
+      blockSize = fileLength-total;
+    }
+    if ((length = recv(fd, (void*)squirtd_rxBuffer, blockSize, 0)) < 0) {
+      return ERROR_FATAL_RECV_FAILED;
     }
     if (length) {
       total += length;
       if (Write(squirtd_outputFd, squirtd_rxBuffer, length) != length) {
-	return ERROR_FILE_WRITE_FAILED;
+	return ERROR_FATAL_FILE_WRITE_FAILED;
       }
       timeout = 0;
     } else {
@@ -341,44 +352,40 @@ file_get(int fd, const char* destFolder, uint32_t nameLength, uint32_t writeToCw
 }
 
 
-static void
+static uint32_t
 file_send(int fd, char* filename)
 {
-  struct {
-    int32_t size;
-    uint32_t protection;
-  } fileInfo = {.size = -1};
+  int32_t size = -1;
+  uint32_t error = 0;
 
   BPTR lock = Lock((APTR)filename, ACCESS_READ);
   if (!lock) {
-    send(fd, (void*)&fileInfo.size, sizeof(fileInfo.size), 0);
-    return;
+    if (send(fd, (void*)&size, sizeof(size), 0) != sizeof(size)) {
+      return ERROR_FATAL_SEND_FAILED;
+    }
+    return 0;
   }
 
   struct FileInfoBlock infoBlock;
   Examine(lock, &infoBlock);
   UnLock(lock);
 
-  fileInfo.size = infoBlock.fib_Size;
-  fileInfo.protection = infoBlock.fib_Protection;
-
   if (infoBlock.fib_DirEntryType > 0) {
-    fileInfo.size = -1;
-    squirtd_error = ERROR_SUCK_ON_DIR;
+    size = -1;
+    error = ERROR_SUCK_ON_DIR;
+  } else {
+    size = infoBlock.fib_Size;
   }
 
-  if (send(fd, (void*)&fileInfo, sizeof(fileInfo), 0) != sizeof(fileInfo)) {
-    return;
-  }
-
-  if (fileInfo.size == 0) {
-    return;
+  if (send(fd, (void*)&size, sizeof(size), 0) != sizeof(size) ||
+      send(fd, (void*)&infoBlock.fib_Protection, sizeof(infoBlock.fib_Protection), 0) != sizeof(infoBlock.fib_Protection)) {
+    return ERROR_FATAL_SEND_FAILED;
   }
 
   squirtd_inputFd = Open((APTR)squirtd_filename, MODE_OLDFILE);
 
   if (!squirtd_inputFd) {
-    return;
+    return ERROR_FILE_READ_FAILED;
   }
 
   squirtd_rxBuffer = malloc(BLOCK_SIZE);
@@ -387,23 +394,24 @@ file_send(int fd, char* filename)
   do {
     int len;
     if ((len = Read(squirtd_inputFd, squirtd_rxBuffer, BLOCK_SIZE) ) < 0) {
-      return;
+      return ERROR_FILE_READ_FAILED;
     } else {
       if (send(fd, squirtd_rxBuffer, len, 0) != len) {
-	return;
+	return ERROR_FATAL_SEND_FAILED;
       }
       total += len;
     }
 
-  } while (total < fileInfo.size);
+  } while (total < size);
 
-  return;
+  return error;
 }
 
 
 int
 main(int argc, char **argv)
 {
+  uint32_t error;
   if (argc != 2) {
     fatalError("squirtd: dest_folder\n");
   }
@@ -450,7 +458,7 @@ main(int argc, char **argv)
 
  again:
   //  printf("waiting for command...\n");
-  squirtd_error = 0;
+  error = 0;
 
   struct {
     uint32_t command;
@@ -459,45 +467,58 @@ main(int argc, char **argv)
 
   if (recv(squirtd_connectionFd, (void*)&command.command, sizeof(command.command), 0) != sizeof(command.command) ||
      recv(squirtd_connectionFd, (void*)&command.nameLength, sizeof(command.nameLength), 0) != sizeof(command.nameLength)) {
-    squirtd_error = ERROR_RECV_FAILED;
+    error = ERROR_FATAL_RECV_FAILED;
     goto error;
   }
 
-  if (command.command > SQUIRT_COMMAND_SQUIRT_TO_CWD) {
-    squirtd_filename = malloc(command.nameLength+1);
-
-    if (recv(squirtd_connectionFd, squirtd_filename, command.nameLength, 0) != (int)command.nameLength) {
-      squirtd_error = ERROR_RECV_FAILED;
-      goto error;
-    }
-
-    squirtd_filename[command.nameLength] = 0;
-
-    if (command.command == SQUIRT_COMMAND_CLI) {
-      exec_run(squirtd_connectionFd, squirtd_filename);
-    } else if (command.command == SQUIRT_COMMAND_CD) {
-      exec_cd(squirtd_filename);
-    } else if (command.command == SQUIRT_COMMAND_SUCK) {
-      file_send(squirtd_connectionFd, squirtd_filename);
-    } else if (command.command == SQUIRT_COMMAND_DIR) {
-      exec_dir(squirtd_connectionFd, squirtd_filename);
-    } else if (command.command == SQUIRT_COMMAND_CWD) {
-      exec_cwd(squirtd_connectionFd);
-    } else if (command.command == SQUIRT_COMMAND_SET_INFO) {
-      file_setInfo(squirtd_connectionFd, squirtd_filename);
-    }
+  const char* destFolder = argv[1];
+  char* filenamePtr;
+  int fullPathLen;
+  if (command.command == SQUIRT_COMMAND_SQUIRT) {
+    int destFolderLen = strlen(destFolder);
+    fullPathLen = command.nameLength+destFolderLen;
+    squirtd_filename = malloc(fullPathLen+1);
+    strcpy(squirtd_filename, destFolder);
+    filenamePtr = squirtd_filename+destFolderLen;
   } else {
-    squirtd_error = file_get(squirtd_connectionFd, argv[1], command.nameLength, command.command == SQUIRT_COMMAND_SQUIRT_TO_CWD);
-    if (squirtd_error) {
-      goto error;
-    }
+    fullPathLen = command.nameLength;
+    filenamePtr = squirtd_filename = malloc(command.nameLength+1);
   }
 
-  sendStatus(squirtd_connectionFd, squirtd_error);
+  if (recv(squirtd_connectionFd, filenamePtr, command.nameLength, 0) != (int)command.nameLength) {
+    error = ERROR_FATAL_RECV_FAILED;
+    goto error;
+  }
+
+  squirtd_filename[fullPathLen] = 0;
+
+
+  if (command.command == SQUIRT_COMMAND_CLI) {
+    error = exec_run(squirtd_connectionFd, squirtd_filename);
+  } else if (command.command == SQUIRT_COMMAND_CD) {
+    error = exec_cd(squirtd_filename);
+  } else if (command.command == SQUIRT_COMMAND_SUCK) {
+    error = file_send(squirtd_connectionFd, squirtd_filename);
+  } else if (command.command == SQUIRT_COMMAND_DIR) {
+    error = exec_dir(squirtd_connectionFd, squirtd_filename);
+  } else if (command.command == SQUIRT_COMMAND_CWD) {
+    error = exec_cwd(squirtd_connectionFd);
+  } else if (command.command == SQUIRT_COMMAND_SET_INFO) {
+    error = file_setInfo(squirtd_connectionFd, squirtd_filename);
+  } else if (command.command == SQUIRT_COMMAND_SQUIRT ||
+	     command.command == SQUIRT_COMMAND_SQUIRT_TO_CWD) {
+    error = file_get(squirtd_connectionFd);
+  }
+
+  if (sendU32(squirtd_connectionFd, error) != 0) {
+    error = ERROR_FATAL_SEND_FAILED;
+  }
 
   cleanupForNextRun();
 
-  goto again;
+  if (error < ERROR_FATAL_ERROR) {
+    goto again;
+  }
 
  error:
 

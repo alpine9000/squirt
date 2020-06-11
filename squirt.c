@@ -64,25 +64,6 @@ squirt_file(const char* filename, const char* destFilename, int writeToCurrentDi
     fatalError("send() fileLength failed");
   }
 
-#if 0
-    if (util_sendU32(main_socketFd, protection) != 0) {
-      fatalError("send() protection failed");
-    }
-
-    if (util_sendU32(main_socketFd, dateStamp->days) != 0) {
-      fatalError("send() datestamp failed");
-    }
-
-    if (util_sendU32(main_socketFd, dateStamp->mins) != 0) {
-      fatalError("send() datestamp failed");
-    }
-
-    if (util_sendU32(main_socketFd, dateStamp->ticks) != 0) {
-      fatalError("send() datestamp failed");
-    }
-#endif
-
-
   squirt_fileFd = util_open(filename, O_RDONLY|_O_BINARY);
 
   if (!squirt_fileFd) {

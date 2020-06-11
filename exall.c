@@ -169,11 +169,15 @@ exall_readExAllData(dir_entry_t* entry, const char* path)
 int
 exall_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 {
-  int identical =
+
+  int commentIdentical =
+    ((one->comment == 0 && two->comment == 0)|| (one->comment != 0 && two->comment != 0 &&
+    ((strstr(one->comment, "Erstellt") != NULL &&  strstr(two->comment, "Erstellt") != NULL) ||
+       strcmp(one->comment, two->comment) == 0)));
+
+  int identical = commentIdentical &&
     one->name != NULL && two->name != NULL &&
     strcmp(one->name, two->name) == 0 &&
-    ((one->comment == 0 && two->comment == 0)||
-     (one->comment != 0 && two->comment != 0 && strcmp(one->comment, two->comment) == 0)) &&
     one->type == two->type &&
     one->size == two->size &&
     one->prot == two->prot &&
@@ -184,6 +188,7 @@ exall_identicalExAllData(dir_entry_t* one, dir_entry_t* two)
 #if 0
   if (!identical) {
     printf("name: >%s<>%s< %d\n", one->name, two->name, strcmp(one->name, two->name) );
+    printf("comment: %d\n", commentIdentical);
     printf("comment: %d %d\n", one->comment == 0, two->comment == 0);
     if (one->comment != 0) {
       printf("comment 1:>%s<\n", one->comment);

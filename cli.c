@@ -413,6 +413,7 @@ cli_completeHook(const char* text)
   if (cli_dirEntryList) {
     dir_freeEntryList(cli_dirEntryList);
   }
+
   cli_dirEntryList = dir_read(cli_readLineBase);
 }
 

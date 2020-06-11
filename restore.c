@@ -182,7 +182,6 @@ restore_operation(const char* filename, void* data)
 {
   if (strcmp(filename, ".") == 0 ||
       strcmp(filename, "..") == 0 ||
-      strcmp(filename, ".git") == 0 ||
       strcmp(filename, SQUIRT_EXALL_INFO_DIR) == 0) {
     return;
   }
@@ -325,7 +324,7 @@ restore_main(int argc, char* argv[])
   }
 
   if (skipFile) {
-    restore_skipFile = backup_loadSkipFile(skipFile);
+    restore_skipFile = backup_loadSkipFile(skipFile, 0);
   }
 
   util_connect(hostname);

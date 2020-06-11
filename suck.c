@@ -51,6 +51,9 @@ squirt_suckFile(const char* filename, int progress, const char* destFilename, ui
 
 
   if (fileLength == -1) {
+    uint32_t status;
+    util_recvU32(main_socketFd, &status);
+    printf("remote file not found %d\n", status);
     return -1;
   }
 
@@ -155,7 +158,11 @@ suck_main(int argc, char* argv[])
 
   fflush(stdout);
 
-  printf("\nsucked %s -> %s (%s bytes) in %0.02f seconds ", argv[2], baseName, util_formatNumber(length), ((double)micros)/1000000.0f);
-  util_printFormatSpeed(length, ((double)micros)/1000000.0f);
-  printf("\n");
+  if (length > 0) {
+    printf("\nsucked %s -> %s (%s bytes) in %0.02f seconds ", argv[2], baseName, util_formatNumber(length), ((double)micros)/1000000.0f);
+    util_printFormatSpeed(length, ((double)micros)/1000000.0f);
+    printf("\n");
+  } else {
+    fprintf(stderr, "%s: failed to suck %s\n", main_argv0, argv[2]);
+  }
 }

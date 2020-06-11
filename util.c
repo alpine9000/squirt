@@ -27,13 +27,16 @@
 
 static const char* errors[] = {
   [_ERROR_SUCCESS] = "Unknown error",
-  [ERROR_RECV_FAILED] = "recv failed",
-  [ERROR_SEND_FAILED] = "send failed",
-  [ERROR_CREATE_FILE_FAILED] = "create file failed",
-  [ERROR_FILE_WRITE_FAILED] = "file write failed",
+  [ERROR_FATAL_ERROR] = "fatal error",
+  [ERROR_FATAL_RECV_FAILED] = "recv failed",
+  [ERROR_FATAL_SEND_FAILED] = "send failed",
+  [ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE] = "failed to create os resource",
+  [ERROR_FATAL_CREATE_FILE_FAILED] = "create file failed",
+  [ERROR_FATAL_FILE_WRITE_FAILED] = "file write failed",
   [ERROR_FILE_READ_FAILED] = "file read failed",
+  [ERROR_SET_DATESTAMP_FAILED] = "set datestamp failed",
+  [ERROR_SET_PROTECTION_FAILED] = "set protection failed",
   [ERROR_CD_FAILED] = "cd failed",
-  [ERROR_FAILED_TO_CREATE_OS_RESOURCE] = "failed to create os resource",
   [ERROR_EXEC_FAILED] = "exec failed",
   [ERROR_SUCK_ON_DIR] = "suck on dir",
 };

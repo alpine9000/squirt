@@ -136,7 +136,12 @@ backup_backupList(dir_entry_list_t* list)
       } else {
 	uint32_t protect;
 	if (squirt_suckFile(path, 1, 0, &protect) < 0) {
-	  fatalError("failed to backup %s", path);
+	  /*
+	    FILE* fp = fopen("skip-entry", "wb+");
+	    fprintf(fp, "%s\n", path);
+	    fclose(fp);
+	  */
+	    fatalError("failed to backup %s", path);
 	}
 	exall_saveExAllData(entry, path);
 	printf("\n");
@@ -250,12 +255,15 @@ backup_backupDir(const char* dir)
 
 
 char*
-backup_loadSkipFile(const char* filename)
+backup_loadSkipFile(const char* filename, int ignoreErrors)
 {
   struct stat st;
 
   if (stat(filename, &st) == -1) {
-    fatalError("filed to load skip file: %s", filename);
+    if (!ignoreErrors) {
+      fatalError("filed to load skip file: %s", filename);
+    }
+    return 0;
   }
 
   int fileLength = st.st_size;
@@ -271,7 +279,7 @@ backup_loadSkipFile(const char* filename)
     } else {
       fatalError("failed to open skipfile %s", filename);
     }
-    
+
     close(fd);
   }
   return skipFile;
@@ -336,7 +344,9 @@ backup_main(int argc, char* argv[])
   }
 
   if (skipfile) {
-    backup_skipFile = backup_loadSkipFile(skipfile);
+    backup_skipFile = backup_loadSkipFile(skipfile, 0);
+  } else {
+    backup_skipFile = backup_loadSkipFile(".skip", 1);
   }
 
   util_connect(hostname);
