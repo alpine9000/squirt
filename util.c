@@ -300,6 +300,38 @@ util_printFormatSpeed(int32_t size, double elapsed)
 
 
 void
+util_printSimpleProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength)
+{
+  (void)start;
+  int percentage;
+
+  if (fileLength) {
+    percentage = (total*100)/fileLength;
+  } else {
+    percentage = 100;
+  }
+
+#ifndef _WIN32
+  printf("\r%c[K", 27);
+#else
+  printf("\r");
+#endif
+  fflush(stdout);
+  if (percentage >= 100) {
+    printf("\xE2\x9C\x85 "); // utf-8 tick
+  } else {
+    printf("\xE2\x8C\x9B "); // utf-8 hourglass
+  }
+
+  printf("%s %3d%% ", filename, percentage);
+
+#ifndef _WIN32
+  fflush(stdout);
+#endif
+}
+
+
+void
 util_printProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength)
 {
   (void)filename;

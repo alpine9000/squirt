@@ -360,7 +360,10 @@ cli_runCommand(char* line)
 static void
 cli_onExit(void)
 {
-  main_cleanupAndExit(EXIT_SUCCESS);
+  //  main_cleanupAndExit(EXIT_SUCCESS);
+  printf("CTRL-C!\n");
+  extern int blah_blah;
+  blah_blah = 1;
 }
 
 

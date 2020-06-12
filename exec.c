@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 
 #include "argv.h"
 #include "main.h"
@@ -10,6 +11,9 @@
 
 static char* exec_command = 0;
 
+static int exec_exitState = 0;
+
+int blah_blah = 0;
 
 void
 exec_cleanup(void)
@@ -21,6 +25,52 @@ exec_cleanup(void)
 }
 
 
+static int
+exec_readCmdData()
+{
+  char buffer[1];
+
+  int length;
+  ioctl(main_socketFd, FIONREAD, (char*)&length);
+
+  int recvd = util_recv(main_socketFd, &buffer, sizeof(buffer), 0);
+  if (recvd <= 0) {
+    return -1;
+  }
+
+  int done = 0;
+  for (int i = 0; i < recvd && !done; i++) {
+    uint8_t c = buffer[i];
+    if (c == 0) {
+      exec_exitState++;
+      fflush(stdout);
+
+      if (exec_exitState == 4) {
+	done = 1;
+	break;
+      }
+    } else if (c == 0x9B) {
+      fprintf(stdout, "%c[", 27);
+      fflush(stdout);
+    } else {
+#ifdef _WIN32
+      buffer[bindex++] = c;
+      if (bindex == sizeof(buffer)) {
+	write(1, buffer, bindex);
+	bindex = 0;
+      }
+#else
+      int ignore = write(1, &c, 1);
+      (void)ignore;
+#endif
+    }
+  }
+  if (done) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
 int
 exec_cmd(int argc, char** argv)
 {
@@ -62,28 +112,51 @@ exec_cmd(int argc, char** argv)
     char buffer[20];
     int bindex = 0;
 #endif
-    int exitState = 0;
-    while (util_recv(main_socketFd, &c, 1, 0)) {
-      if (c == 0) {
-	exitState++;
-	if (exitState == 4) {
-	  break;
-	}
-      } else if (c == 0x9B) {
-	fprintf(stdout, "%c[", 27);
-	fflush(stdout);
-      } else {
-#ifdef _WIN32
-	buffer[bindex++] = c;
-	if (bindex == sizeof(buffer)) {
-	  write(1, buffer, bindex);
-	  bindex = 0;
-	}
-#else
-	int ignore = write(1, &c, 1);
-	(void)ignore;
-#endif
+
+    fd_set readFds;
+    struct timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    exec_exitState = 0;
+
+    //    int done = 0;
+    // while (!done) {
+    // if (
+    //   printf("got something\n");
+    //   if (1 || FD_ISSET(main_socketFd, &readFds)) {
+
+
+ //    while (util_recv(main_socketFd, &c, 1, 0)) {
+    //    while (select(FD_SETSIZE, &readFds, 0, 0, 0)) {
+    int done = 0;
+    while (!done) {
+      FD_ZERO(&readFds);
+      FD_SET(main_socketFd, &readFds);
+      timeout.tv_sec = 1;
+      timeout.tv_usec = 0;
+      int numfds;
+      sigset_t sig = {0};
+      numfds = pselect(FD_SETSIZE, &readFds, 0, 0, 0, &sig);
+
+      if (blah_blah) {
+	send(main_socketFd, &c, 1, 0);
+	blah_blah = 0;
+	//	    done = 1;
+      }// else {
+
+      if (numfds && FD_ISSET(main_socketFd, &readFds)) {
+	done = exec_readCmdData();
       }
+
+
+      // }
+    }
+
+    if (blah_blah) {
+      // read 4 byte breakout
+      //      uint32_t null;
+      //      util_recvU32(main_socketFd, &null);
+
     }
 
 #ifdef _WIN32

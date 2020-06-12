@@ -187,36 +187,6 @@ restore_remoteFileNeedsUpdating(const char* filename, int isDir, dir_entry_t* li
   return update;
 }
 
-void
-restore_printProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength)
-{
-  (void)start;
-  int percentage;
-
-  if (fileLength) {
-    percentage = (total*100)/fileLength;
-  } else {
-    percentage = 100;
-  }
-
-#ifndef _WIN32
-  printf("\r%c[K", 27);
-#else
-  printf("\r");
-#endif
-  fflush(stdout);
-  if (percentage >= 100) {
-    printf("\xE2\x9C\x85 "); // utf-8 tick
-  } else {
-    printf("\xE2\x8C\x9B "); // utf-8 hourglass
-  }
-
-  printf("%s %3d%% ", filename, percentage);
-
-#ifndef _WIN32
-  fflush(stdout);
-#endif
-}
 
 static void
 restore_operation(const char* filename, void* data)
@@ -272,7 +242,7 @@ restore_operation(const char* filename, void* data)
       fflush(stdout);
       char updateMessage[PATH_MAX];
       snprintf(updateMessage, sizeof(updateMessage), "%s restoring...", path);
-      if (squirt_file(filename, updateMessage, path, 1, restore_printProgress) != 0) {
+      if (squirt_file(filename, updateMessage, path, 1, util_printSimpleProgress) != 0) {
 	fatalError("failed to restore %s\n", path);
       }
       if (restore_updateExAll(filename, path) != 0) {

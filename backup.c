@@ -139,7 +139,7 @@ backup_backupList(dir_entry_list_t* list)
 	char updateMessage[PATH_MAX];
 	snprintf(updateMessage, sizeof(updateMessage), "%s saving...", path);
 
-	if (squirt_suckFile(path, updateMessage, restore_printProgress, 0, &protect) < 0) {
+	if (squirt_suckFile(path, updateMessage, util_printSimpleProgress, 0, &protect) < 0) {
 	  /*
 	    FILE* fp = fopen("skip-entry", "wb+");
 	    fprintf(fp, "%s\n", path);

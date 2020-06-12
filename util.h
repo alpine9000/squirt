@@ -63,6 +63,9 @@ void
 util_printProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength);
 
 void
+util_printSimpleProgress(const char* filename, struct timeval* start, uint32_t total, uint32_t fileLength);
+
+void
 util_onCtrlC(void (*handler)(void));
 
 size_t
