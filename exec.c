@@ -17,8 +17,9 @@ static volatile int exec_sigIntActive = 0;
 void
 exec_onCtrlC(void)
 {
-  printf("CTRL-C!\n");
+  printf(" Interrupt\n");
   exec_sigIntActive = 1;
+  util_onCtrlC(exec_onCtrlC); 
 }
 
 
