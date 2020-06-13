@@ -124,6 +124,7 @@ _fatalError(void)
   exit(1);
 }
 
+
 static uint32_t
 sendU32(int fd, uint32_t status)
 {
@@ -144,10 +145,11 @@ exec_runner(void)
   exec_closeFd(&exec_cmdInputFd.read);
 }
 
+
 static void
 exec_pipeBridge(void)
 {
-  char buffer[1];
+  char buffer[16];
   int length;
 
   while ((length = Read(exec_cmdPipeFd.read, buffer, sizeof(buffer))) > 0) {
@@ -164,6 +166,7 @@ exec_pipeBridge(void)
 
   exec_closeFd(&exec_bridgePipeFd.write);
 }
+
 
 static void
 exec_sigIntCmd(void)
@@ -196,6 +199,7 @@ exec_createPipe(squirtd_pipe_fd_t* fd, const char* name)
   return 0;
 }
 
+
 static uint32_t
 exec_run(int fd, const char* command)
 {
@@ -225,19 +229,24 @@ exec_run(int fd, const char* command)
 
   int rx = 0;
 
+  //      FD_ZERO(&readFds);
+
   while (!done) {
-    FD_ZERO(&readFds);
+
     FD_SET(fd,&readFds);
+
     WaitSelect(fd+1, &readFds, 0, 0, 0, &signals);
 
     if (FD_ISSET(fd, &readFds)) {
+      printf("got sigint\n");
       uint8_t c;
       recv(fd, &c, 1, 0);
       exec_sigIntCmd();
       done = 1;
     }
 
-    if (SetSignal(0, exec_readSignal) & exec_readSignal) {
+    //    if (SetSignal(0, exec_readSignal) & exec_readSignal) {
+
       while (rx < exec_cmdTxLength) {
 	done = (length = Read(exec_bridgePipeFd.read, buffer, sizeof(buffer))) <= 0;
 	rx += length;
@@ -246,7 +255,7 @@ exec_run(int fd, const char* command)
 	  goto cleanup;
 	}
       }
-    }
+      //    }
 
     if (exec_done) {
       done = 1;
