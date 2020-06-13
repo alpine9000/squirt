@@ -1,5 +1,8 @@
 #pragma once
 
+void
+exec_onCtrlC(void);
+
 int
 exec_cmd(int argc, char** argv);
 

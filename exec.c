@@ -3,17 +3,24 @@
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
+#ifndef _WIN32
 #include <sys/ioctl.h>
-
+#endif
 #include "argv.h"
 #include "main.h"
 #include "common.h"
 
 static char* exec_command = 0;
-
 static int exec_exitState = 0;
+static volatile int exec_sigIntActive = 0;
 
-int blah_blah = 0;
+void
+exec_onCtrlC(void)
+{
+  printf("CTRL-C!\n");
+  exec_sigIntActive = 1;
+}
+
 
 void
 exec_cleanup(void)
@@ -25,58 +32,16 @@ exec_cleanup(void)
 }
 
 
-static int
-exec_readCmdData()
-{
-  char buffer[1];
 
-  int length;
-  ioctl(main_socketFd, FIONREAD, (char*)&length);
 
-  int recvd = util_recv(main_socketFd, &buffer, sizeof(buffer), 0);
-  if (recvd <= 0) {
-    return -1;
-  }
-
-  int done = 0;
-  for (int i = 0; i < recvd && !done; i++) {
-    uint8_t c = buffer[i];
-    if (c == 0) {
-      exec_exitState++;
-      fflush(stdout);
-
-      if (exec_exitState == 4) {
-	done = 1;
-	break;
-      }
-    } else if (c == 0x9B) {
-      fprintf(stdout, "%c[", 27);
-      fflush(stdout);
-    } else {
-#ifdef _WIN32
-      buffer[bindex++] = c;
-      if (bindex == sizeof(buffer)) {
-	write(1, buffer, bindex);
-	bindex = 0;
-      }
-#else
-      int ignore = write(1, &c, 1);
-      (void)ignore;
-#endif
-    }
-  }
-  if (done) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
 int
 exec_cmd(int argc, char** argv)
 {
   uint8_t commandCode;
   int commandLength = 0;
   exec_command = 0;
+  exec_sigIntActive = 0;
+  exec_exitState = 0;
 
   if (argc == 2 && strcmp("cd", argv[0]) == 0) {
     commandLength = strlen(argv[1]);
@@ -114,50 +79,58 @@ exec_cmd(int argc, char** argv)
 #endif
 
     fd_set readFds;
-    struct timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-    exec_exitState = 0;
 
-    //    int done = 0;
-    // while (!done) {
-    // if (
-    //   printf("got something\n");
-    //   if (1 || FD_ISSET(main_socketFd, &readFds)) {
-
-
- //    while (util_recv(main_socketFd, &c, 1, 0)) {
-    //    while (select(FD_SETSIZE, &readFds, 0, 0, 0)) {
     int done = 0;
     while (!done) {
       FD_ZERO(&readFds);
       FD_SET(main_socketFd, &readFds);
-      timeout.tv_sec = 1;
-      timeout.tv_usec = 0;
       int numfds;
+#ifdef _WIN32
+      struct timeval tv;
+      tv.tv_sec = 0;
+      tv.tv_usec = 500000;
+      numfds = select(FD_SETSIZE, &readFds, 0, 0, &tv);
+#else
       sigset_t sig = {0};
       numfds = pselect(FD_SETSIZE, &readFds, 0, 0, 0, &sig);
+#endif
 
-      if (blah_blah) {
-	send(main_socketFd, &c, 1, 0);
-	blah_blah = 0;
-	//	    done = 1;
-      }// else {
-
-      if (numfds && FD_ISSET(main_socketFd, &readFds)) {
-	done = exec_readCmdData();
+      if (exec_sigIntActive) {
+	send(main_socketFd, (void*)&c, 1, 0);
+	exec_sigIntActive = 0;
       }
 
+      if (numfds && FD_ISSET(main_socketFd, &readFds)) {
+	int recvd = util_recv(main_socketFd, &c, sizeof(c), 0);
+	if (recvd <= 0) {
+	  return -1;
+	}
 
-      // }
+	if (c == 0) {
+	  exec_exitState++;
+	  fflush(stdout);
+
+	  if (exec_exitState == 4) {
+	    done = 1;
+	  }
+	} else if (c == 0x9B) {
+	  fprintf(stdout, "%c[", 27);
+	  fflush(stdout);
+	} else {
+#ifdef _WIN32
+	  buffer[bindex++] = c;
+	  if (bindex == sizeof(buffer)) {
+	    write(1, buffer, bindex);
+	    bindex = 0;
+	  }
+#else
+	  int ignore = write(1, &c, 1);
+	  (void)ignore;
+#endif
+	}
+      }
     }
 
-    if (blah_blah) {
-      // read 4 byte breakout
-      //      uint32_t null;
-      //      util_recvU32(main_socketFd, &null);
-
-    }
 
 #ifdef _WIN32
     if (bindex) {

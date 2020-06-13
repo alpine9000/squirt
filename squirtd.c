@@ -31,12 +31,9 @@ static int squirtd_listenFd = 0;
 static int squirtd_connectionFd = 0;
 static char* squirtd_filename = 0;
 static char* squirtd_rxBuffer = 0;
-
-
 static BPTR squirtd_outputFd = 0;
 static BPTR squirtd_inputFd = 0;
 
-static const char* exec_command;
 
 typedef struct {
   BPTR read;
@@ -49,10 +46,22 @@ static squirtd_pipe_fd_t exec_cmdInputFd;
 static struct Task* exec_mainTask = 0;
 static LONG exec_readSignal = 0;
 static LONG exec_done = 0;
+volatile int exec_cmdTxLength = 0;
+static const char* exec_command;
 
 #ifdef __GNUC__
 struct Library *SocketBase = 0;
 #endif
+
+
+static void
+exec_closeFd(BPTR* fd)
+{
+  if (*fd > 0) {
+    Close(*fd);
+    *fd = 0;
+  }
+}
 
 
 static void
@@ -65,20 +74,12 @@ cleanupForNextRun(void)
     exec_readSignal = 0;
   }
 
-
-  if (squirtd_inputFd > 0) {
-    Close(squirtd_inputFd);
-    squirtd_inputFd = 0;
-  }
+  exec_closeFd(&squirtd_inputFd);
+  exec_closeFd(&squirtd_outputFd);
 
   if (squirtd_rxBuffer) {
     free(squirtd_rxBuffer);
     squirtd_rxBuffer = 0;
-  }
-
-  if (squirtd_outputFd > 0) {
-    Close(squirtd_outputFd);
-    squirtd_outputFd = 0;
   }
 
   if (squirtd_filename) {
@@ -139,20 +140,9 @@ exec_runner(void)
 {
   squirtd_execError = SystemTags((APTR)exec_command, SYS_Input, exec_cmdInputFd.read, SYS_Output, exec_cmdPipeFd.write, TAG_DONE, 0) == 0 ? 0 : ERROR_EXEC_FAILED;
 
-  printf("runner complete\n");
-
-  if (exec_cmdPipeFd.write) {
-    Close(exec_cmdPipeFd.write);
-    exec_cmdPipeFd.write = 0;
-  }
-
-  if (exec_cmdInputFd.read) {
-    Close(exec_cmdInputFd.read);
-    exec_cmdInputFd.read = 0;
-   }
+  exec_closeFd(&exec_cmdPipeFd.write);
+  exec_closeFd(&exec_cmdInputFd.read);
 }
-
-volatile int hack = 0;
 
 static void
 exec_pipeBridge(void)
@@ -164,7 +154,7 @@ exec_pipeBridge(void)
     if (Write(exec_bridgePipeFd.write, buffer, length) != length) {
       goto done;
     }
-    hack += length;
+    exec_cmdTxLength += length;
     Signal(exec_mainTask, exec_readSignal);
   }
 
@@ -172,10 +162,7 @@ exec_pipeBridge(void)
 
   exec_done = 1;
 
-  if (exec_bridgePipeFd.write) {
-    Close(exec_bridgePipeFd.write);
-    exec_bridgePipeFd.write = 0;
-  }
+  exec_closeFd(&exec_bridgePipeFd.write);
 }
 
 static void
@@ -185,7 +172,6 @@ exec_sigIntCmd(void)
   struct Process* me = (void*)FindTask(0);
   for (unsigned long i = 0; i < MaxCli(); i++) {
     struct Process * proc =  FindCliProc(i);
-
     if (proc != me && proc->pr_ConsoleTask == me->pr_ConsoleTask) {
       if (strcmp("Background CLI", proc->pr_Task.tc_Node.ln_Name) == 0) {
 	Signal((struct Task*)proc, SIGBREAKF_CTRL_C);
@@ -195,54 +181,41 @@ exec_sigIntCmd(void)
   Permit();
 }
 
+
+static uint32_t
+exec_createPipe(squirtd_pipe_fd_t* fd, const char* name)
+{
+  if ((fd->write = Open((APTR)name, MODE_NEWFILE)) == 0) {
+    return ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
+  }
+
+  if ((fd->read = Open((APTR)name, MODE_OLDFILE)) == 0) {
+    return ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
+  }
+
+  return 0;
+}
+
 static uint32_t
 exec_run(int fd, const char* command)
 {
   exec_command = command;
-  const char* pipe = "PIPE:";
-  const char* bridgePipe = "PIPE:1";
-  const char* inputPipe = "PIPE:2";
   uint32_t error = 0;
 
-  hack = 0;
+  exec_cmdTxLength = 0;
 
   exec_mainTask = FindTask(NULL);
   exec_readSignal = AllocSignal(-1);
   SetSignal(0, exec_readSignal);
 
-  if ((exec_cmdPipeFd.write = Open((APTR)pipe, MODE_NEWFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
-    goto cleanup;
-  }
-
-  if ((exec_cmdPipeFd.read = Open((APTR)pipe, MODE_OLDFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
-    goto cleanup;
-  }
-
-  if ((exec_cmdInputFd.write = Open((APTR)inputPipe, MODE_NEWFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
-    goto cleanup;
-  }
-
-  if ((exec_cmdInputFd.read = Open((APTR)inputPipe, MODE_OLDFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
-    goto cleanup;
-  }
-
-  if ((exec_bridgePipeFd.write = Open((APTR)bridgePipe, MODE_NEWFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
-    goto cleanup;
-  }
-
-  if ((exec_bridgePipeFd.read = Open((APTR)bridgePipe, MODE_OLDFILE)) == 0) {
-    error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
+  if ((error = exec_createPipe(&exec_cmdPipeFd, "PIPE:0")) ||
+      (error = exec_createPipe(&exec_cmdInputFd, "PIPE:1")) ||
+      (error = exec_createPipe(&exec_bridgePipeFd, "PIPE:2"))) {
     goto cleanup;
   }
 
   CreateNewProcTags(NP_Name, (LONG)"EXEC RUNNER", NP_Entry, (uint32_t)exec_runner, TAG_DONE, 0);
   CreateNewProcTags(NP_Name, (LONG)"PIPE BRIDGE", NP_Entry, (uint32_t)exec_pipeBridge, TAG_DONE, 0);
-
 
   char buffer[1];
   int length;
@@ -253,26 +226,19 @@ exec_run(int fd, const char* command)
   int rx = 0;
 
   while (!done) {
-    //    LONG signals = WaitSelect(exec_readSignal);
     FD_ZERO(&readFds);
     FD_SET(fd,&readFds);
     WaitSelect(fd+1, &readFds, 0, 0, 0, &signals);
-    //    exec_sigIntCmd();
-    //    done = 1;
 
     if (FD_ISSET(fd, &readFds)) {
       uint8_t c;
-      if (recv(fd, &c, 1, 0) != 1) {
-	//	done = 1;
-      }
+      recv(fd, &c, 1, 0);
       exec_sigIntCmd();
       done = 1;
-      //      break;
     }
 
-    //    if (signals & exec_readSignal) {
     if (SetSignal(0, exec_readSignal) & exec_readSignal) {
-      while (rx < hack) {
+      while (rx < exec_cmdTxLength) {
 	done = (length = Read(exec_bridgePipeFd.read, buffer, sizeof(buffer))) <= 0;
 	rx += length;
 	if (send(fd, buffer, length, 0) != length) {
@@ -305,17 +271,9 @@ exec_run(int fd, const char* command)
     error = ERROR_FATAL_SEND_FAILED;
   }
 
-  if (exec_bridgePipeFd.read) {
-    Close(exec_bridgePipeFd.read);
-  }
-
-  if (exec_cmdPipeFd.read) {
-    Close(exec_cmdPipeFd.read);
-  }
-
-  if (exec_cmdInputFd.write) {
-    Close(exec_cmdInputFd.write);
-  }
+  exec_closeFd(&exec_bridgePipeFd.read);
+  exec_closeFd(&exec_cmdPipeFd.read);
+  exec_closeFd(&exec_cmdInputFd.write);
 
   return error;
 }

@@ -356,17 +356,6 @@ cli_runCommand(char* line)
 }
 
 
-
-static void
-cli_onExit(void)
-{
-  //  main_cleanupAndExit(EXIT_SUCCESS);
-  printf("CTRL-C!\n");
-  extern int blah_blah;
-  blah_blah = 1;
-}
-
-
 static char*
 cli_completeGenerator(int* list_index, const char* text, int len)
 {
@@ -435,7 +424,7 @@ cli_main(int argc, char* argv[])
 
 
   util_connect(argv[1]);
-  util_onCtrlC(cli_onExit);
+  util_onCtrlC(exec_onCtrlC);
 
   srl_init(cli_prompt, cli_completeHook, cli_completeGenerator);
 
