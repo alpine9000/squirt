@@ -6,7 +6,7 @@ MINGW_LIBS=-lws2_32 -liconv -lreadline
 ifeq ($(PLATFORM),osx)
 # OSX
 CC=gcc
-STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined 
+STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined
 LIBS=-liconv -lreadline
 MINGW_GCC_PREFIX=/usr/local/mingw
 MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
@@ -52,7 +52,7 @@ SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
 HOST_CLIENT_APPS=$(addprefix build/, $(CLIENT_APPS))
-SERVER_APPS=build/amiga/squirtd #build/amiga/squirtd.vbcc
+SERVER_APPS=build/amiga/squirtd build/amiga/skill build/amiga/sps #build/amiga/squirtd.vbcc
 
 all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
 
@@ -83,8 +83,15 @@ build/amiga/squirtd.vbcc: $(SQUIRTD_AMIGA_OBJS)
 
 build/amiga/squirtd: $(SQUIRTD_AMIGA_GCC_OBJS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
-	$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-strip build/amiga/squirtd
+	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
+
+build/amiga/skill: kill.c
+	@mkdir -p build/amiga
+	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s kill.c -o build/amiga/skill -lamiga
+
+build/amiga/sps: ps.c
+	@mkdir -p build/amiga
+	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s ps.c -o build/amiga/sps -lamiga
 
 install: all
 	cp $(HOST_CLIENT_APPS) /usr/local/bin/

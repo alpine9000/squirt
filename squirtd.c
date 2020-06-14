@@ -10,6 +10,7 @@
 #include "common.h"
 
 //#define DEBUG_OUTPUT
+//#define DEBUG_LOG
 
 #ifdef DEBUG_OUTPUT
 #include <stdio.h>
@@ -20,11 +21,16 @@
 #define fatalError(x) _fatalError()
 #endif
 
+#ifdef DEBUG_LOG
+FILE* log_fd;
+#endif
+
 typedef struct {
   uint32_t protection;
   struct DateStamp dateStamp;
 } squirtd_file_info_t;
 
+struct Process *squirtd_proc = 0;
 static uint32_t squirtd_execError = 0;
 static int squirtd_listenFd = 0;
 static int squirtd_connectionFd = 0;
@@ -69,6 +75,10 @@ cleanupForNextRun(void)
 static void
 cleanup(void)
 {
+#ifdef DEBUG_LOG
+  fclose(log_fd);
+#endif
+
   if (squirtd_connectionFd > 0) {
     CloseSocket(squirtd_connectionFd);
     squirtd_connectionFd = 0;
@@ -96,6 +106,9 @@ _fatalError(char* msg)
 _fatalError(void)
 #endif
 {
+#ifdef DEBUG_LOG
+  fprintf(log_fd, msg);
+#endif
   fprintf(stderr, msg);
   cleanup();
   exit(1);
@@ -123,13 +136,26 @@ exec_runner(void)
   }
 }
 
+static const uint32_t PutChProc=0x16c04e75; /* move.b d0,(a3)+ ; rts */
 
 static uint32_t
 exec_run(int fd, const char* command)
 {
-  exec_command = command;
-  const char* pipe = "PIPE:";
   uint32_t error = 0;
+  exec_command = command;
+
+  char pipe[32];
+  uint32_t procId = (uint32_t)squirtd_proc;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+  RawDoFmt((APTR)"PIPE:%ux", // CONST_STRPTR FormatString
+	   &procId,   // APTR DataStream
+	   (void (*)())&PutChProc,         // VOID_FUNC PutChProc
+	   pipe     // APTR PutChData
+	   );
+#pragma GCC diagnostic pop
+
 
   if ((exec_outputFd = Open((APTR)pipe, MODE_NEWFILE)) == 0) {
     error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
@@ -140,6 +166,7 @@ exec_run(int fd, const char* command)
     error = ERROR_FATAL_FAILED_TO_CREATE_OS_RESOURCE;
     goto cleanup;
   }
+
 
   CreateNewProcTags(NP_Entry, (uint32_t)exec_runner, TAG_DONE, 0);
 
@@ -254,8 +281,7 @@ static uint32_t
 exec_cwd(int fd)
 {
   char name[108];
-  struct Process *me = (struct Process*)FindTask(0);
-  NameFromLock(me->pr_CurrentDir, (STRPTR)name, sizeof(name)-1);
+  NameFromLock(squirtd_proc->pr_CurrentDir, (STRPTR)name, sizeof(name)-1);
   int32_t len = strlen(name);
 
   if (send(fd, (void*)&len, sizeof(len), 0) != sizeof(len) ||
@@ -409,15 +435,57 @@ file_send(int fd, char* filename)
 
 
 int
+inetd_getSocket(struct Process* me)
+{
+  struct DaemonMessage *dm = (struct DaemonMessage *)me->pr_ExitData;
+  int sock;
+
+#ifdef DEBUG_LOG
+  fprintf(log_fd, "dm = %x\n", dm);
+#endif
+
+  if (dm == NULL) {
+    return -1;
+  }
+
+  sock = ObtainSocket(dm->dm_ID, dm->dm_Family, dm->dm_Type, 0);
+
+#ifdef DEBUG_LOG
+  fprintf(log_fd, "ObtainSocket = %d\n", sock);
+#endif
+
+  if (sock < 0) {
+#ifdef DEBUG_LOG
+    fclose(log_fd);
+#endif
+    exit(0xA1);
+  }
+
+  return sock;
+}
+
+
+int
 main(int argc, char **argv)
 {
+  uint32_t inetd = 0;
   uint32_t error;
+
+  squirtd_proc = (struct Process*)FindTask(0);
+
+#ifdef DEBUG_LOG
+  struct Task* task = FindTask(NULL);
+  char filename[255];
+  sprintf(filename, ":squirt.%d.log", (ULONG)task);
+
+  log_fd = fopen(filename, "w+");
+#endif
+
   if (argc != 2) {
     fatalError("squirtd: dest_folder\n");
   }
 
-  struct Process *me = (struct Process*)FindTask(0);
-  me->pr_WindowPtr = (APTR)-1; // disable requesters
+  squirtd_proc->pr_WindowPtr = (APTR)-1; // disable requesters
 
 #ifdef __GNUC__
   SocketBase = OpenLibrary((APTR)"bsdsocket.library", 4);
@@ -426,6 +494,12 @@ main(int argc, char **argv)
   }
 #endif
 
+  squirtd_connectionFd = inetd_getSocket(squirtd_proc);
+
+  if (squirtd_connectionFd >= 0) {
+    inetd = 1;
+    goto inetd_start;
+  }
   struct sockaddr_in sa = {0};
   sa.sin_family = AF_INET;
   sa.sin_addr.s_addr = 0; //inet_addr("0.0.0.0");
@@ -453,8 +527,11 @@ main(int argc, char **argv)
     fatalError("accept failed\n");
   }
 
+ inetd_start:
+  {
   const LONG socketTimeout = 1000;
   setsockopt(squirtd_connectionFd, SOL_SOCKET, SO_RCVTIMEO, (char*)&socketTimeout, sizeof(socketTimeout));
+  }
 
  again:
   //  printf("waiting for command...\n");
@@ -528,7 +605,12 @@ main(int argc, char **argv)
     CloseSocket(squirtd_connectionFd);
     squirtd_connectionFd = 0;
   }
-  goto reconnect;
+
+  if (!inetd) {
+    goto reconnect;
+  } else {
+    cleanup();
+  }
 
   return 0;
 }
