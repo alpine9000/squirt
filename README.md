@@ -33,7 +33,9 @@ For example:
 
 ## Running as a daemon
 
-It's easy to run `squirtd` on your Amiga as a background daemon, just start it from your TCP/IP stack's startup script. `squirtd` should gracefully exit when your TCP/IP stack exits.
+You can run squirtd either as a standalone background daemon or launch it from your TCP/IP stack's inetd (or equivalent) super server. Running as a standalone daemon will limit you to a single active session, but this is still a handy option if using an emulator with bsdsocket.library emulation enabled but no TCP/IP stack installed.
+
+To run as a standalone daemon start it from your TCP/IP stack's startup script or add to to your S:Startup-sequence (in the case of emulator without a TCP/IP stack install). `squirtd` should gracefully exit when your TCP/IP stack exits. Note: This mode will limit you to a single active session
 
 ### AmiTCP
 Add the following to AmiTCP:db/User-Startnet.
@@ -48,6 +50,8 @@ Add the following to S:Network-Startup.
     run >NIL: aux:squirtd Work:Incoming/
 
 where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
+
+See [Using with inetd](doc/inetd.md) for details on how to add squirtd to your super server.
 
 ## Management commands
 
