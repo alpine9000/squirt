@@ -105,8 +105,8 @@ exec_cmd(int argc, char** argv)
 }
 
 
-int
-exec_captureCmd(char** outputPtr, int argc, char** argv)
+char*
+exec_captureCmd(uint32_t* errorCode, int argc, char** argv)
 {
   uint8_t commandCode;
   int commandLength = 0;
@@ -169,9 +169,8 @@ exec_captureCmd(char** outputPtr, int argc, char** argv)
 
   exec_cleanup();
 
-  *outputPtr = output;
-
-  return error;
+  *errorCode = error;
+  return output;
 }
 
 

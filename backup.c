@@ -115,6 +115,7 @@ backup_doCrcVerify(const char* path)
    if (strcasecmp(buffer, result) != 0) {
      fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
    }
+   free(result);
 }
 
 static void

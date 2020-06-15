@@ -563,8 +563,8 @@ char*
 util_execCapture(char* command)
 {
   char** argv = argv_build(command);
-  char* output = 0;
-  int error = exec_captureCmd(&output, argv_argc(argv), argv);
+  uint32_t error = 0;
+  char* output = exec_captureCmd(&error, argv_argc(argv), argv);
   argv_free(argv);
   if (error) {
     if (output) {
