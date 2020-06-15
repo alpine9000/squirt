@@ -11,6 +11,7 @@
 #include <getopt.h>
 #include <sys/stat.h>
 
+
 #include "main.h"
 #include "common.h"
 #include "exall.h"
@@ -25,6 +26,7 @@ static char* restore_currentDir = 0;
 static char* restore_dirBuffer = 0;
 static char* restore_skipFile = 0;
 static int restore_quiet = 0;
+static int restore_crcVerify = 0;
 
 static void
 restore_restoreDir(const char* remote);
@@ -251,6 +253,7 @@ restore_operation(const char* filename, void* data)
       if (restore_updateExAll(filename, path) != 0) {
 	fatalError("failed to update ExAll for %s", filename);
       }
+
 #ifndef _WIN32
 	printf("\r%c[K", 27);
 #else
@@ -259,6 +262,7 @@ restore_operation(const char* filename, void* data)
 	printf("\xE2\x9C\x85 %s restoring...done\n", path); // utf-8 tick
       break;
     case UPDATE_NOUPDATE:
+
       if (!restore_quiet) {
 	printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
       }
@@ -278,14 +282,27 @@ restore_operation(const char* filename, void* data)
       if (restore_updateExAll(filename, path) != 0) {
 	fatalError("failed to update ExAll for %s", filename);
       }
+
+      if (restore_crcVerify) {
+	if (backup_doCrcVerify(path) != 0) {
+	  fatalError("crc32 checksum failed for %s", path);
+	}
+      }
 #ifndef _WIN32
 	printf("\r%c[K", 27);
 #else
 	printf("\r");
 #endif
-	printf("\xE2\x9C\x85 %s restoring...done\n", path); // utf-8 tick
+	printf("\xE2\x9C\x85 %s restoring...done  \n", path); // utf-8 tick
       break;
     case UPDATE_NOUPDATE:
+
+      if (restore_crcVerify) {
+	if (backup_doCrcVerify(path) != 0) {
+	  fatalError("crc32 checksum failed for %s", path);
+	}
+      }
+
       if (!restore_quiet) {
 	printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
       }
@@ -367,6 +384,7 @@ restore_main(int argc, char* argv[])
     static struct option long_options[] =
       {
        {"quiet",    no_argument, &restore_quiet, 'q'},
+       {"crc32",    no_argument, &restore_crcVerify, 'c'},
        {"skipfile", required_argument, 0, 's'},
        {0, 0, 0, 0}
       };

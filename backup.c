@@ -97,9 +97,10 @@ backup_pruneFiles(const char* filename, void* data)
   }
 }
 
-static void
+uint32_t
 backup_doCrcVerify(const char* path)
 {
+  uint32_t error = 0;
    uint32_t crc;
    if (crc32_sum(util_amigaBaseName(path), &crc) != 0) {
      fatalError("crc32 failed for %s", util_amigaBaseName(path));
@@ -113,9 +114,12 @@ backup_doCrcVerify(const char* path)
    }
    snprintf(buffer, sizeof(buffer), "%x\n", crc);
    if (strcasecmp(buffer, result) != 0) {
-     fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
+     //     fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
+     printf("CRC doesn't match! %s", path);
+     error = 1;
    }
    free(result);
+   return error;
 }
 
 static void
@@ -135,7 +139,8 @@ backup_backupList(dir_entry_list_t* list)
 	}
       }
       int skip = skipFile;
-      {
+
+      if (!skipFile) {
 	dir_entry_t *temp = dir_newDirEntry();
 	struct stat st;
 	if (stat(util_amigaBaseName(path), &st) == 0) {
@@ -147,15 +152,18 @@ backup_backupList(dir_entry_list_t* list)
 	  }
 	}
 	dir_freeEntry(temp);
+
+	if (backup_crcVerify) {
+	  if (backup_doCrcVerify(path) != 0) {
+	    skip = 0;
+	  }
+	}
       }
 
       if (skip) {
 	if (skipFile) {
-	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27); // bold
+	  printf("\xF0\x9F\x9A\xAB %c[1m%s \xE2\x80\x94\xE2\x80\x94\xE2\x80\x94SKIPPED\xE2\x80\x94\xE2\x80\x94\xE2\x80\x94 %c[0m\n", 27, path, 27); // utf-8 no entry bold
 	} else {
-	  if (backup_crcVerify) {
-	    backup_doCrcVerify(path);
-	  }
 	  printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
 	}
       } else {
@@ -175,7 +183,9 @@ backup_backupList(dir_entry_list_t* list)
 	exall_saveExAllData(entry, path);
 
 	if (backup_crcVerify) {
-	  backup_doCrcVerify(path);
+	  if (backup_doCrcVerify(path) != 0) {
+	    fatalError("CRC32 verification failed for %s", path);
+	  }
 	}
 
 #ifndef _WIN32
@@ -183,7 +193,7 @@ backup_backupList(dir_entry_list_t* list)
 #else
 	printf("\r");
 #endif
-	printf("\xE2\x9C\x85 %s saving...done\n", path); // utf-8 tick
+	printf("\xE2\x9C\x85 %s saving...done  \n", path); // utf-8 tick
 	fflush(stdout);
       }
       free((void*)path);
@@ -208,7 +218,7 @@ backup_backupList(dir_entry_list_t* list)
 	exall_saveExAllData(entry, path);
 	free((void*)path);
       } else {
-	printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27);
+	  printf("\xF0\x9F\x9A\xAB %c[1m%s \xE2\x80\x94\xE2\x80\x94\xE2\x80\x94SKIPPED\xE2\x80\x94\xE2\x80\x94\xE2\x80\x94 %c[0m\n", 27, path, 27); // utf-8 no entry bold
 	free((void*)path);
       }
 

@@ -108,7 +108,11 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
   ut.actime = st.st_atime;
   ut.modtime = mktime(tm);
 
-  if (utime(baseName, &ut) != 0) {
+  if (
+#ifdef _WIN32
+      !S_ISDIR(st.st_mode) &&
+#endif
+      utime(baseName, &ut) != 0) {
     fatalError("failed to set file attributes of %s\n", baseName);
   }
 
