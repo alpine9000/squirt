@@ -3,6 +3,9 @@
 int
 exec_cmd(int argc, char** argv);
 
+int
+exec_captureCmd(char** outputPtr, int argc, char** argv);
+
 void
 exec_cleanup(void);
 

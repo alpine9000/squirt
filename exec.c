@@ -105,6 +105,76 @@ exec_cmd(int argc, char** argv)
 }
 
 
+int
+exec_captureCmd(char** outputPtr, int argc, char** argv)
+{
+  uint8_t commandCode;
+  int commandLength = 0;
+  exec_command = 0;
+
+  int outputLength = 255;
+  int outputSize = 0;
+  char* output = malloc(outputLength);
+
+  for (int i = 0; i < argc; i++) {
+    commandLength += strlen(argv[i]);
+    commandLength++;
+  }
+
+  exec_command = malloc(commandLength+1);
+  strcpy(exec_command, argv[0]);
+  for (int i = 1; i < argc; i++) {
+    strcat(exec_command, " ");
+    strcat(exec_command, argv[i]);
+  }
+  commandCode = SQUIRT_COMMAND_CLI;
+
+  if (util_sendCommand(main_socketFd, commandCode) != 0) {
+    fatalError("failed to connect to squirtd server");
+  }
+
+  if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, exec_command) != 0) {
+    fatalError("send() command failed");
+  }
+
+  if (commandCode != SQUIRT_COMMAND_CD) {
+    uint8_t c;
+    int exitState = 0;
+    while (util_recv(main_socketFd, &c, 1, 0)) {
+      if (c == 0) {
+	exitState++;
+	if (exitState == 4) {
+	  if (outputSize >= outputLength) {
+	    outputLength = outputLength*2;
+	    output = realloc(output, outputLength);
+	  }
+	  output[outputSize++] = 0;
+	  break;
+	}
+      } else {
+	if (outputSize >= outputLength) {
+	  outputLength = outputLength*2;
+	  output = realloc(output, outputLength);
+	}
+	output[outputSize++] = c;
+      }
+    }
+  }
+
+  uint32_t error;
+
+  if (util_recvU32(main_socketFd, &error) != 0) {
+    fatalError("exec: failed to read remote status");
+  }
+
+  exec_cleanup();
+
+  *outputPtr = output;
+
+  return error;
+}
+
+
 void
 exec_main(int argc, char* argv[])
 {

@@ -29,8 +29,7 @@ LIBS=$(MINGW_LIBS)
 STATIC_ANALYZE=
 endif
 
-SQUIRTD_SRCS=squirtd.c
-SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c
+SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c crc32.c
 HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h
 COMMON_DEPS=Makefile platforms.mk mingw.mk
 
@@ -42,22 +41,18 @@ DEBUG_CFLAGS=-g $(STATIC_ANALYZE)
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
 
 CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
-AMIGA_GCC_CFLAGS=-fwhole-program -msmall-code -Os -fomit-frame-pointer -noixemul $(WARNINGS)
+AMIGA_GCC_CFLAGS=-Os -msmall-code -fomit-frame-pointer -noixemul $(WARNINGS) 
+AMIGA_SQUIRTD_CFLAGS=$(AMIGA_GCC_CFLAGS) -fwhole-program
 VBCC_CFLAGS=-O1 +aos68k -c99
 
-
-SQUIRTD_AMIGA_OBJS=$(addprefix build/obj/amiga/, $(SQUIRTD_SRCS:.c=.o))
-SQUIRTD_AMIGA_GCC_OBJS= $(addprefix build/obj/amiga.gcc/, $(SQUIRTD_SRCS:.c=.o))
-SQUIRTD_OBJS=$(addprefix build/obj/, $(SQUIRTD_SRCS:.c=.o))
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 
 HOST_CLIENT_APPS=$(addprefix build/, $(CLIENT_APPS))
-SERVER_APPS=build/amiga/squirtd build/amiga/skill build/amiga/sps #build/amiga/squirtd.vbcc
+AMIGA_APPS=build/amiga/squirtd build/amiga/ssum build/amiga/skill build/amiga/sps #build/amiga/squirtd.vbcc
 
-all: $(HOST_CLIENT_APPS) $(SERVER_APPS)
+all: $(HOST_CLIENT_APPS) $(AMIGA_APPS)
 
 client: $(HOST_CLIENT_APPS)
-
 
 build/squirt: $(SQUIRT_OBJS)
 	$(CC) $(CFLAGS) $(SQUIRT_OBJS) -o build/squirt $(LIBS)
@@ -77,21 +72,25 @@ build/obj/amiga.gcc/%.o: %.c $(COMMON_DEPS)
 	@mkdir -p build/obj/amiga.gcc
 	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) $*.c -c -o build/obj/amiga.gcc/$*.o
 
-build/amiga/squirtd.vbcc: $(SQUIRTD_AMIGA_OBJS)
+build/amiga/squirtd.vbcc: squirtd.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	vc $(VBCC_CFLAGS) $(SQUIRTD_AMIGA_OBJS) -o build/amiga/squirtd.vbcc -lauto
+	vc $(VBCC_CFLAGS) squirtd.c -o build/amiga/squirtd.vbcc -lauto
 
-build/amiga/squirtd: $(SQUIRTD_AMIGA_GCC_OBJS)
+build/amiga/squirtd: squirtd.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
+	$(AMIGA_GCC) squirtd.c -s $(AMIGA_SQUIRTD_CFLAGS) $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
 
-build/amiga/skill: kill.c
+build/amiga/ssum: build/obj/amiga.gcc/crc32.o build/obj/amiga.gcc/sum.o crc32.h $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s kill.c -o build/amiga/skill -lamiga
+	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s build/obj/amiga.gcc/crc32.o build/obj/amiga.gcc/sum.o -o build/amiga/ssum -lamiga
 
-build/amiga/sps: ps.c
+build/amiga/skill: kill.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s ps.c -o build/amiga/sps -lamiga
+	$(AMIGA_GCC) $(AMIGA_SQUIRTD_CFLAGS) -s kill.c -o build/amiga/skill -lamiga
+
+build/amiga/sps: ps.c $(COMMON_DEPS)
+	@mkdir -p build/amiga
+	$(AMIGA_GCC) $(AMIGA_SQUIRTD_CFLAGS) -s ps.c -o build/amiga/sps -lamiga
 
 install: all
 	cp $(HOST_CLIENT_APPS) /usr/local/bin/

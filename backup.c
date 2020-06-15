@@ -14,7 +14,7 @@
 #include "main.h"
 #include "common.h"
 #include "exall.h"
-
+#include "crc32.h"
 
 static void
 backup_backupDir(const char* dir);
@@ -24,6 +24,7 @@ static char* backup_currentDir = 0;
 static char* backup_skipFile = 0;
 static char* backup_dirBuffer = 0;
 static int backup_prune = 0;
+static int backup_crcVerify = 0;
 
 void
 backup_cleanup()
@@ -97,6 +98,26 @@ backup_pruneFiles(const char* filename, void* data)
 }
 
 static void
+backup_doCrcVerify(const char* path)
+{
+   uint32_t crc;
+   if (crc32_sum(util_amigaBaseName(path), &crc) != 0) {
+     fatalError("crc32 failed for %s", util_amigaBaseName(path));
+   }
+   char buffer[PATH_MAX];
+   snprintf(buffer, sizeof(buffer),"ssum \"%s\"", path);
+   fflush(stdout);
+   char* result = util_execCapture(buffer);
+   if (!result) {
+     fatalError("remote crc32 failed for %s", util_amigaBaseName(path));
+   }
+   snprintf(buffer, sizeof(buffer), "%x\n", crc);
+   if (strcasecmp(buffer, result) != 0) {
+     fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
+   }
+}
+
+static void
 backup_backupList(dir_entry_list_t* list)
 {
   dir_entry_t* entry = list->head;
@@ -131,6 +152,9 @@ backup_backupList(dir_entry_list_t* list)
 	if (skipFile) {
 	  printf("%c[1m%s ***SKIPPED***%c[0m\n", 27, path, 27); // bold
 	} else {
+	  if (backup_crcVerify) {
+	    backup_doCrcVerify(path);
+	  }
 	  printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
 	}
       } else {
@@ -148,6 +172,11 @@ backup_backupList(dir_entry_list_t* list)
 	    fatalError("failed to backup %s", path);
 	}
 	exall_saveExAllData(entry, path);
+
+	if (backup_crcVerify) {
+	  backup_doCrcVerify(path);
+	}
+
 #ifndef _WIN32
 	printf("\r%c[K", 27);
 #else
@@ -298,7 +327,7 @@ backup_loadSkipFile(const char* filename, int ignoreErrors)
 _Noreturn static void
 backup_usage(void)
 {
-  fatalError("invalid arguments\nusage: %s [--prune] [--skipfile=skipfile] hostname dir_name", main_argv0);
+  fatalError("invalid arguments\nusage: %s [--crc32] [--prune] [--skipfile=skipfile] hostname dir_name", main_argv0);
 }
 
 
@@ -316,6 +345,7 @@ backup_main(int argc, char* argv[])
     static struct option long_options[] =
       {
        {"prune",    no_argument, &backup_prune, 'p'},
+       {"crc32",    no_argument, &backup_crcVerify, 'c'},
        {"skipfile", required_argument, 0, 's'},
        {0, 0, 0, 0}
       };

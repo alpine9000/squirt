@@ -80,6 +80,9 @@ util_system(char** argv);
 int
 util_exec(char* command);
 
+char*
+util_execCapture(char* command);
+
 int
 util_cd(const char* dir);
 

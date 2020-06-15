@@ -306,7 +306,7 @@ util_printProgress(const char* filename, struct timeval* start, uint32_t total, 
   int percentage;
 
   if (fileLength) {
-    percentage = (total*100)/fileLength;
+    percentage = (((uint64_t)total*(uint64_t)100)/(uint64_t)fileLength);
   } else {
     percentage = 100;
   }
@@ -556,6 +556,23 @@ util_exec(char* command)
   int error = exec_cmd(argv_argc(argv), argv);
   argv_free(argv);
   return error;
+}
+
+
+char*
+util_execCapture(char* command)
+{
+  char** argv = argv_build(command);
+  char* output = 0;
+  int error = exec_captureCmd(&output, argv_argc(argv), argv);
+  argv_free(argv);
+  if (error) {
+    if (output) {
+      free(output);
+    }
+    return 0;
+  }
+  return output;
 }
 
 

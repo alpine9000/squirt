@@ -194,7 +194,7 @@ restore_printProgress(const char* filename, struct timeval* start, uint32_t tota
   int percentage;
 
   if (fileLength) {
-    percentage = (total*100)/fileLength;
+    percentage = (((uint64_t)total*(uint64_t)100)/(uint64_t)fileLength);
   } else {
     percentage = 100;
   }
