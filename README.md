@@ -119,7 +119,9 @@ Click on the image below to see a demo video of the remote shell in action.
 
 ### backing up
 
-    squirt_backup [--prune] [--skipfile=skip_filename] hostname path_to_backup
+    squirt_backup [--crc32] [--prune] [--skipfile=skip_filename] hostname path_to_backup
+
+`crc32` verify the backed up file using crc32 (slow on slow amigas)
 
 `prune` remove previously backed up files that have subsequently been deleted on your Amiga.
 
