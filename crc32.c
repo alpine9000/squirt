@@ -2,7 +2,11 @@
 
 #include "crc32.h"
 #include <stdint.h>
+#ifdef AMIGA
+#include <proto/dos.h>
+#else
 #include <stdio.h>
+#endif
 
 typedef struct crc32ctx
 {
@@ -10,9 +14,7 @@ typedef struct crc32ctx
   uint32_t length;
 } crc32_ctx_t;
 
-
-
-static const uint32_t crctab[] = {
+static const uint32_t crctab[256] = {
     0x0,
     0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc, 0x17c56b6b,
     0x1a864db2, 0x1e475005, 0x2608edb8, 0x22c9f00f, 0x2f8ad6d6,
@@ -67,8 +69,7 @@ static const uint32_t crctab[] = {
     0xa2f33668, 0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
 };
 
-
-#define COMPUTE(var, ch)    (var) = (var) << 8 ^ crctab[(var) >> 24 ^ (ch)]
+#define COMPUTE(var, ch)  (var) = (var) << 8 ^ crctab[(var) >> 24 ^ (ch)]
 
 static void
 crc32_init(crc32_ctx_t* ctx)
@@ -82,7 +83,7 @@ static void
 crc32_computeUint8(crc32_ctx_t* ctx, uint8_t data)
 {
   COMPUTE(ctx->crc, data);
-  //  ctx->length++;
+  ctx->length++;
 }
 
 
@@ -96,30 +97,46 @@ crc32_finilize(crc32_ctx_t* ctx)
   ctx->crc = ~ctx->crc;
 }
 
+static char buffer[4096];
 
 int
 crc32_sum(const char* filename, uint32_t *outCrc)
 {
+#ifdef AMIGA
+  int fd = Open((APTR)filename, MODE_OLDFILE);
+  if (!fd) {
+    return -1;
+  }
+#else
   FILE* fp = fopen(filename, "rb");
   if (!fp) {
     return -1;
   }
+#endif
 
   int len;
-  char buffer[256];
+
   crc32_ctx_t crc;
   crc32_init(&crc);
 
+#ifdef AMIGA
+  while((len = Read(fd, buffer, sizeof(buffer))) > 0) {
+#else
   while((len = fread(buffer, 1, sizeof(buffer), fp))) {
-    for(int i = 0; i < len; i++) {
-      crc32_computeUint8(&crc, buffer[i]);
+#endif
+    char* ptr = buffer;
+    while (len--) {
+      crc32_computeUint8(&crc, *ptr++);
     }
-    crc.length += len;
   }
 
   crc32_finilize(&crc);
 
   *outCrc = crc.crc;
+#ifdef AMIGA
+  Close(fd);
+#else
   fclose(fp);
+#endif
   return 0;
 }

@@ -41,7 +41,7 @@ DEBUG_CFLAGS=-g $(STATIC_ANALYZE)
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors
 
 CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS) #-Os
-AMIGA_GCC_CFLAGS=-Os -msmall-code -fomit-frame-pointer -noixemul $(WARNINGS) 
+AMIGA_GCC_CFLAGS=-DAMIGA -Os -msmall-code -fomit-frame-pointer -noixemul $(WARNINGS)
 AMIGA_SQUIRTD_CFLAGS=$(AMIGA_GCC_CFLAGS) -fwhole-program
 VBCC_CFLAGS=-O1 +aos68k -c99
 
