@@ -36,7 +36,10 @@ CC=gcc
 LIBS=-lreadline
 else ifeq ($(PLATFORM),linux)
 # Linux
+ifeq ($(RELEASE),true)
+else
 CC=gcc-10
+endif
 STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined
 LIBS=-lreadline
 MINGW_GCC_PREFIX=/usr/x86_64-w64-mingw32

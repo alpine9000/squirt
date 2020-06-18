@@ -1,4 +1,4 @@
-RELEASE=false
+RELEASE=true
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
 
 include platforms.mk
