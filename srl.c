@@ -183,12 +183,21 @@ srl_init(const char*(*prompt)(void),void (*complete_hook)(const char* text), cha
   _srl_prompt = prompt;
   _srl_generator = generator;
   _srl_complete_hook = complete_hook;
+
   rl_attempted_completion_function = srl_completion_function;
 
-  rl_completer_quote_characters = "\\";
-  rl_filename_quote_characters  = " `'=[]{}()<>|&\\\t" ;
-  rl_filename_dequoting_function = srl_dequote_func;
-  rl_filename_quoting_function = srl_quote_func;
-  rl_char_is_quoted_p = srl_char_is_quoted;
-  rl_directory_rewrite_hook = srl_directory_rewrite;
+#ifdef _WIN32
+    if (1) {
+      rl_completer_quote_characters = "\"";
+      rl_filename_quote_characters  = " `'=[]{}()<>|&\\\t" ;
+    } else
+#endif
+    {
+      rl_completer_quote_characters = "\\";
+      rl_filename_quote_characters  = " `'=[]{}()<>|&\\\t" ;
+      rl_filename_dequoting_function = srl_dequote_func;
+      rl_filename_quoting_function = srl_quote_func;
+      rl_char_is_quoted_p = srl_char_is_quoted;
+      rl_directory_rewrite_hook = srl_directory_rewrite;
+    }
 }
