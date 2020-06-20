@@ -127,6 +127,9 @@ Click on the image below to see a demo video of the remote shell in action.
 
 `skip_filename` is an optional file which includes a list of files or directories that should not be backed up.
 
+NOTES: 
+ * For crc32 support you must install the `ssum` Amiga executable in your Amiga's `C:` directory
+ * By default a file named `.skip` will used as a skip file
 
 ![](images/backup.png)
 
