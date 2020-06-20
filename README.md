@@ -76,6 +76,8 @@ See [inetd configuration](doc/inetd.md) for details on how to add squirtd to you
 ### remote cli
     squirt_cli hostname
 
+![](images/cli.png)
+
 By default any command you type will be executed on the remote Amiga:
 
     1.WB3.1>dir DEVS:Monitors
