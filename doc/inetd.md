@@ -21,7 +21,7 @@ If you use squirtd behind inetd you can have multiple concurrent sessions active
 
 1. Add squirtd to DEVS:Internet/services
 ```
-    squirt           6969/tcp
+    squirt           6969/tcp                       # squirt
 ```
 2. Add squirtd to DEVS:Internet/servers
 ```
