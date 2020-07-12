@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dos/dostags.h>
+#include <exec/execbase.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/socket.h>
@@ -168,7 +169,7 @@ exec_run(int fd, const char* command)
   }
 
 
-  CreateNewProcTags(NP_Entry, (uint32_t)exec_runner, TAG_DONE, 0);
+  CreateNewProcTags(NP_Entry, (uint32_t)exec_runner, NP_Cli, 1, TAG_DONE, 0);
 
   char buffer[16];
   int length;
@@ -471,10 +472,10 @@ main(int argc, char **argv)
   uint32_t inetd = 0;
   uint32_t error;
 
-  squirtd_proc = (struct Process*)FindTask(0);
+  squirtd_proc = (struct Process*)SysBase->ThisTask;
 
 #ifdef DEBUG_LOG
-  struct Task* task = FindTask(NULL);
+  struct Task* task = SysBase->ThisTask;
   char filename[255];
   sprintf(filename, ":squirt.%d.log", (ULONG)task);
 
