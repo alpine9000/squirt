@@ -17,6 +17,9 @@ util_getHomeDir(void);
 const char*
 util_getHistoryFile(void);
 
+char*
+util_latin1ToUtf8(const char* _buffer);
+
 int
 util_mkpath(const char *dir);
 

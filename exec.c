@@ -58,10 +58,8 @@ exec_cmd(int argc, char** argv)
 
   if (commandCode != SQUIRT_COMMAND_CD) {
     uint8_t c;
-#ifdef _WIN32
-    char buffer[20];
+    char buffer[1024];
     int bindex = 0;
-#endif
     int exitState = 0;
     while (util_recv(main_socketFd, &c, 1, 0)) {
       if (c == 0) {
@@ -70,27 +68,30 @@ exec_cmd(int argc, char** argv)
 	  break;
 	}
       } else if (c == 0x9B) {
+	//write(1, buffer, bindex);
+	buffer[bindex] = 0;
+	char* utf8 = util_latin1ToUtf8(buffer);
+	write(1, utf8, strlen(utf8));
+	free(utf8);
+	bindex = 0;
 	fprintf(stdout, "%c[", 27);
 	fflush(stdout);
       } else {
-#ifdef _WIN32
 	buffer[bindex++] = c;
-	if (bindex == sizeof(buffer)) {
-	  write(1, buffer, bindex);
+	if (c == '\n' || bindex == sizeof(buffer)) {
+	  //write(1, buffer, bindex);
+	  buffer[bindex] = 0;
+	  char* utf8 = util_latin1ToUtf8(buffer);
+	  write(1, utf8, strlen(utf8));
+	  free(utf8);
 	  bindex = 0;
 	}
-#else
-	int ignore = write(1, &c, 1);
-	(void)ignore;
-#endif
       }
     }
 
-#ifdef _WIN32
     if (bindex) {
       write(1, buffer, bindex);
     }
-#endif
   }
 
   uint32_t error;

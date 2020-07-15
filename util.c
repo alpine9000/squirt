@@ -260,7 +260,7 @@ util_utf8ToLatin1(const char* buffer)
 }
 
 
-static char*
+char*
 util_latin1ToUtf8(const char* _buffer)
 {
   if (_buffer) {
