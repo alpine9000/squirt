@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <getopt.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 
@@ -125,13 +128,61 @@ squirt_file(const char* filename, const char* progressHeader, const char* destFi
 }
 
 
+_Noreturn static void
+squirt_usage(void)
+{
+  fatalError("invalid arguments\nusage: %s [--dest=destination folder] hostname filename", main_argv0);
+}
+
 void
 squirt_main(int argc, char* argv[])
 {
-  if (argc != 3) {
-    fatalError("incorrect number of arguments\nusage: %s hostname filename", main_argv0);
+  int argvIndex = 1;
+  char *dest = 0, *hostname = 0, * filename = 0;
+
+  while (argvIndex < argc) {
+    static struct option long_options[] =
+      {
+       {"dest", required_argument, 0, 'd'},
+       {0, 0, 0, 0}
+      };
+    int option_index = 0;
+    int c = getopt_long (argc, argv, "", long_options, &option_index);
+    if (c != -1) {
+      argvIndex = optind;
+      switch (c) {
+      case 0:
+	break;
+      case 'd':
+	dest = optarg;
+	break;
+      case '?':
+      default:
+	squirt_usage();
+	break;
+      }
+    } else {
+      if (hostname == 0) {
+	hostname = argv[argvIndex];
+      } else {
+	filename = argv[argvIndex];
+      }
+      optind++;
+      argvIndex++;
+    }
   }
 
-  util_connect(argv[1]);
-  squirt_file(argv[2], 0, 0, 0, util_printProgress);
+  if (hostname == 0 || filename == 0) {
+    squirt_usage();
+  }
+
+  util_connect(hostname);
+  char buffer[PATH_MAX];
+  if (dest) {
+    sprintf(buffer, "cd %s", dest);
+    util_exec(buffer);
+    squirt_file(filename, 0, 0, 1, util_printProgress);
+  } else {
+    squirt_file(filename, 0, 0, 0, util_printProgress);
+  }
 }
