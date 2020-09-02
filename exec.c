@@ -71,7 +71,7 @@ exec_cmd(int argc, char** argv)
 	//write(1, buffer, bindex);
 	buffer[bindex] = 0;
 	char* utf8 = util_latin1ToUtf8(buffer);
-	write(1, utf8, strlen(utf8));
+	size_t ignored __attribute__((unused)) = write(1, utf8, strlen(utf8));
 	free(utf8);
 	bindex = 0;
 	fprintf(stdout, "%c[", 27);
@@ -82,7 +82,7 @@ exec_cmd(int argc, char** argv)
 	  //write(1, buffer, bindex);
 	  buffer[bindex] = 0;
 	  char* utf8 = util_latin1ToUtf8(buffer);
-	  write(1, utf8, strlen(utf8));
+	  size_t ignored __attribute__((unused)) = write(1, utf8, strlen(utf8));
 	  free(utf8);
 	  bindex = 0;
 	}
@@ -90,7 +90,7 @@ exec_cmd(int argc, char** argv)
     }
 
     if (bindex) {
-      write(1, buffer, bindex);
+      size_t ignored __attribute__((unused)) = write(1, buffer, bindex);
     }
   }
 
