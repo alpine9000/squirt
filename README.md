@@ -51,6 +51,11 @@ Add the following to S:Network-Startup.
 
 where `Work:Incoming/` is the destination folder you want `squirtd` to write files.
 
+### AROS/ApolloOS
+Add the following to Sys:System/Network/AROSTCP/S/STARTNET
+
+    Run <>NIL: QUIET c:squirtd work:Incoming/
+
 See [inetd configuration](doc/inetd.md) for details on how to add squirtd to your super server.
 
 ## Management commands
