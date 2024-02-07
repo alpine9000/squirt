@@ -85,8 +85,17 @@ util_connect(const char* hostname)
 {
   struct sockaddr_in sockAddr;
 
+  int port=NETWORK_PORT;
 
-  if (!util_getSockAddr(hostname, NETWORK_PORT, &sockAddr)) {
+  char *colon=strstr(hostname,":");
+  if(colon)
+  {
+          port=strtol(colon+1,NULL,10);
+          *colon=0;   // end hostname string here
+  }
+
+
+  if (!util_getSockAddr(hostname, port, &sockAddr)) {
     goto error;
   }
 
@@ -100,7 +109,7 @@ util_connect(const char* hostname)
 
   return;
  error:
-  fatalError("failed to connect to server %s", hostname);
+  fatalError("failed to connect to server %s:%d", hostname,port);
 }
 
 
