@@ -12,4 +12,4 @@ uint32_t
 backup_doCrcVerify(const char* path);
 
 void
-backup_cleanup();
+backup_cleanup(void);

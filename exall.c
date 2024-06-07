@@ -44,13 +44,11 @@ static char*
 exall_scanComment(FILE* fp)
 {
   char buffer[128] = {0};
-  char* ptr = buffer;
   int len;
   char c;
 
   do {
     len = fread(&c, 1, 1, fp);
-    ptr++;
   } while (len > 0 && c != ':');
 
   size_t i = 0;

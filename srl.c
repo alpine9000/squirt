@@ -100,6 +100,7 @@ srl_dequote_func(char * text, int state)
   char* ret = ptr;
 
   for (int i = 0; *text; i++) {
+    (void)i;
     if (*text != '\\') {
       *ptr++ = *text;
     }
