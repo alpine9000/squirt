@@ -327,24 +327,76 @@ static int
 cli_runCommand(char* line)
 {
   int code;
-  int end = strlen(line);
+  int end = strlen(line) - 1;
   while (end >= 0 && line[end] == ' ') {
     line[end] = 0;
     end--;
   }
+
+  // Remove trailing newline if present
+  line[strcspn(line, "\n")] = 0;
+
+  // Check for Amiga-style directory navigation
+  if (line[0] == '/') {
+    int slash_count = 0;
+    while (line[slash_count] == '/') {
+      slash_count++;
+    }
+    
+    for (int i = 0; i < slash_count; i++) {
+      if (exec_cmd(2, (char*[]){"cd", "/"}) != 0) {
+        fprintf(stderr, "cd: / failed\n");
+        return 0;
+      }
+    }
+
+    const char* new_path = cwd_read();
+    if (new_path != NULL) {
+      cli_changeDir(new_path);
+      return 1;
+    } else {
+      fprintf(stderr, "Failed to get new working directory\n");
+      return 0;
+    }
+  } else if (strncasecmp(line, "cd ", 3) == 0 || 
+             (strchr(line, ':') != NULL && strchr(line, ' ') == NULL) || 
+             line[end] == '/' || 
+             (strchr(line, '/') != NULL && strchr(line, ' ') == NULL)) {
+    char* cmd = strdup(line);
+    char* arg = cmd;
+
+    // If the command starts with "CD " or "cd ", skip past it (case-insensitive)
+    if (strncasecmp(cmd, "cd ", 3) == 0) {
+      arg += 3;
+    }
+
+    // Remove trailing slash if present, unless it's the only character
+    if (strlen(arg) > 1 && arg[strlen(arg) - 1] == '/') {
+      arg[strlen(arg) - 1] = '\0';
+    }
+
+    // Attempt to change directory
+    if (exec_cmd(2, (char*[]){"cd", arg}) == 0) {
+      const char* new_path = cwd_read();
+      if (new_path) {
+        cli_changeDir(new_path);
+        free(cmd);
+        code = 1;
+        return code;
+      }
+    }
+    fprintf(stderr, "cd: %s failed\n", arg);
+    free(cmd);
+    code = 0;
+    return code;
+  }
+
+  // Handle other commands
   char** argv = argv_build((char*)line);
   int argc = argv_argc(argv);
 
   if (strcmp("endcli", argv[0]) == 0) {
     main_cleanupAndExit(EXIT_SUCCESS);
-  } else if (argc == 2 && strcmp("cd", argv[0]) == 0) {
-    if (exec_cmd(argc, argv) == 0) {
-      cli_changeDir(argv[1]);
-      code = 1;
-    } else {
-      fprintf(stderr, "cd: %s failed\n", argv[1]);
-      code = 0;
-    }
   } else if (argv[0][0] == '!') {
     code = cli_hostCommand(argc, argv);
   } else {
