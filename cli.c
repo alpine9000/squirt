@@ -326,7 +326,7 @@ cli_hostCommand(int argc, char** argv)
 static int
 cli_runCommand(char* line)
 {
-  int code;
+  int code = 0;
   int end = strlen(line) - 1;
   while (end >= 0 && line[end] == ' ') {
     line[end] = 0;
@@ -346,22 +346,23 @@ cli_runCommand(char* line)
     for (int i = 0; i < slash_count; i++) {
       if (exec_cmd(2, (char*[]){"cd", "/"}) != 0) {
         fprintf(stderr, "cd: / failed\n");
-        return 0;
+        return code;
       }
     }
 
     const char* new_path = cwd_read();
     if (new_path != NULL) {
       cli_changeDir(new_path);
-      return 1;
+      code = 1;
     } else {
       fprintf(stderr, "Failed to get new working directory\n");
-      return 0;
     }
+    return code;
   } else if (strncasecmp(line, "cd ", 3) == 0 || 
              (strchr(line, ':') != NULL && strchr(line, ' ') == NULL) || 
              line[end] == '/' || 
-             (strchr(line, '/') != NULL && strchr(line, ' ') == NULL)) {
+             (strchr(line, '/') != NULL && strchr(line, ' ') == NULL) ||
+             (line[0] == '"' && strchr(line + 1, '"') != NULL)) {  // Added check for quoted paths
     char* cmd = strdup(line);
     char* arg = cmd;
 
@@ -370,9 +371,22 @@ cli_runCommand(char* line)
       arg += 3;
     }
 
+    // Skip leading spaces
+    while (*arg == ' ') arg++;
+
+    // Handle quoted arguments
+    if (*arg == '"') {
+      arg++; // Skip opening quote
+      char* end_quote = strchr(arg, '"');
+      if (end_quote) {
+        *end_quote = '\0'; // Remove closing quote
+      }
+    }
+
     // Remove trailing slash if present, unless it's the only character
-    if (strlen(arg) > 1 && arg[strlen(arg) - 1] == '/') {
-      arg[strlen(arg) - 1] = '\0';
+    int arg_len = strlen(arg);
+    if (arg_len > 1 && arg[arg_len - 1] == '/') {
+      arg[arg_len - 1] = '\0';
     }
 
     // Attempt to change directory
@@ -380,14 +394,13 @@ cli_runCommand(char* line)
       const char* new_path = cwd_read();
       if (new_path) {
         cli_changeDir(new_path);
-        free(cmd);
         code = 1;
-        return code;
       }
+    } else {
+      fprintf(stderr, "cd: %s failed\n", arg);
+      // code remains 0 (failure)
     }
-    fprintf(stderr, "cd: %s failed\n", arg);
     free(cmd);
-    code = 0;
     return code;
   }
 
