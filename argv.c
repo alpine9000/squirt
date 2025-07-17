@@ -40,8 +40,7 @@ Boston, MA 02110-1301, USA.  */
  char *
  strdup(const char *s1);
 
-void argv_free (vector)
-     char **vector;
+void argv_free (char **vector)
 {
   register char **scan;
 

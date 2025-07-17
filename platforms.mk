@@ -52,8 +52,13 @@ LIBS=$(MINGW_LIBS)
 STATIC_ANALYZE=
 endif
 
+# Use environment variable for Amiga GCC path if set, otherwise use default
+ifndef AMIGA_GCC
 AMIGA_GCC_PREFIX=/usr/local/amiga/bebbo
-AMIGA_GCC=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-amigaos/ndk-include/
+else
+AMIGA_GCC_PREFIX=$(AMIGA_GCC)
+endif
+AMIGA_BIN=$(AMIGA_GCC_PREFIX)/bin/m68k-amigaos-gcc -I$(AMIGA_GCC_PREFIX)/m68k-amigaos/ndk-include/
 
 AMIGA_GCC_CFLAGS=-DAMIGA -Os -msmall-code -fomit-frame-pointer -noixemul $(WARNINGS)
 AMIGA_SQUIRTD_CFLAGS=$(AMIGA_GCC_CFLAGS) -fwhole-program
