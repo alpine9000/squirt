@@ -142,7 +142,7 @@ restore_pushDir(const char* dir)
     char buffer[1024];
     int bindex = 0;
     int exitState = 0;
-    while (util_recv(main_socketFd, &c, 1, 0)) {
+    while (util_recv(main_socketFd, &c, 1, 0) == 1) {
       if (c == 0) {
         exitState++;
         if (exitState == 4) {
@@ -492,7 +492,7 @@ restore_restoreDir(const char* remote)
     char buffer[1024];
     int bindex = 0;
     int exitState = 0;
-    while (util_recv(main_socketFd, &c, 1, 0)) {
+    while (util_recv(main_socketFd, &c, 1, 0) == 1) {
       if (c == 0) {
         exitState++;
         if (exitState == 4) {

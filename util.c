@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <ctype.h>
+#include <errno.h>
 
 #ifndef _WIN32
 #include <ftw.h>
@@ -107,6 +108,24 @@ util_connect(const char* hostname)
   if (connect(main_socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
     goto error;
   }
+
+  // Set socket timeouts to prevent hanging on connection loss
+  struct timeval timeout;
+  timeout.tv_sec = 30;  // 30 second timeout
+  timeout.tv_usec = 0;
+  
+  // Set receive timeout
+  if (setsockopt(main_socketFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+    printf("Warning: Could not set socket receive timeout\n");
+  }
+  
+  // Set send timeout
+  if (setsockopt(main_socketFd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
+    printf("Warning: Could not set socket send timeout\n");
+  }
+
+  // Reset connection error flag for new connection
+  util_resetConnectionErrorFlag();
 
   return;
  error:
@@ -372,6 +391,14 @@ util_amigaBaseName(const char* filename)
   return filename;
 }
 
+// Static flag to prevent duplicate error messages
+static int connection_error_reported = 0;
+
+void
+util_resetConnectionErrorFlag(void)
+{
+  connection_error_reported = 0;
+}
 
 size_t
 util_recv(int socket, void *buffer, size_t length, int flags)
@@ -383,7 +410,23 @@ util_recv(int socket, void *buffer, size_t length, int flags)
     if (got > 0) {
       total += got;
       ptr += got;
+    } else if (got == 0) {
+      // Connection closed by peer
+      if (!connection_error_reported) {
+        printf("Connection closed by Amiga server\n");
+        connection_error_reported = 1;
+      }
+      return got;
     } else {
+      // Error occurred (including timeout)
+      if (!connection_error_reported) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          printf("Connection timeout - Amiga may have crashed or network connection lost\n");
+        } else {
+          printf("Network error: %s\n", strerror(errno));
+        }
+        connection_error_reported = 1;
+      }
       return got;
     }
   } while (total < length);

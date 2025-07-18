@@ -9,6 +9,9 @@ util_formatNumber(int number);
 void
 util_connect(const char* hostname);
 
+void
+util_resetConnectionErrorFlag(void);
+
 #define util_sendCommand(s, x) util_sendU32(s, x)
 
 const char*
