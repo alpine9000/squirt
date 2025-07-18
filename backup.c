@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #include "main.h"
 #include "common.h"
@@ -66,6 +67,51 @@ backup_fullPath(const char* name)
 }
 
 
+// Forward declaration for recursive function
+static int backup_removeDirectoryRecursive(const char* dirname);
+
+// Helper function to recursively remove a directory and all its contents
+static int backup_removeDirectoryRecursive(const char* dirname) {
+  DIR* dir;
+  struct dirent* entry;
+  char path[PATH_MAX];
+  
+  // Open the directory
+  dir = opendir(dirname);
+  if (dir == NULL) {
+    return -1;
+  }
+  
+  // Iterate over all entries in the directory
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+      snprintf(path, PATH_MAX, "%s/%s", dirname, entry->d_name);
+      
+      struct stat st;
+      if (stat(path, &st) == 0) {
+        if (S_ISDIR(st.st_mode)) {
+          // Recursively remove subdirectory
+          if (backup_removeDirectoryRecursive(path) != 0) {
+            closedir(dir);
+            return -1;
+          }
+        } else {
+          // Remove file
+          if (unlink(path) != 0) {
+            closedir(dir);
+            return -1;
+          }
+        }
+      }
+    }
+  }
+  
+  closedir(dir);
+  
+  // Remove the now empty directory
+  return rmdir(dirname);
+}
+
 static void
 backup_pruneFiles(const char* filename, void* data)
 {
@@ -91,8 +137,24 @@ backup_pruneFiles(const char* filename, void* data)
     char* path = backup_fullPath(filename);
     printf("%c[31m%s \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80 REMOVED \xF0\x9F\x92\x80\xF0\x9F\x92\x80\xF0\x9F\x92\x80%c[0m\n", 27, path, 27); // red, utf-8 skulls
     free(path);
-    if (unlink(filename) != 0 || unlink(exFilename) != 0) {
-      fatalError("failed to remove %s\n", filename);
+    
+    struct stat st;
+    if (stat(filename, &st) == 0 && S_ISDIR(st.st_mode)) {
+      // It's a directory, use recursive removal
+      if (backup_removeDirectoryRecursive(filename) != 0) {
+        fatalError("failed to remove directory %s\n", filename);
+      }
+    } else {
+      // It's a file, use unlink
+      if (unlink(filename) != 0) {
+        fatalError("failed to remove file %s\n", filename);
+      }
+    }
+    
+    // Also remove the exall info file
+    if (unlink(exFilename) != 0 && errno != ENOENT) {
+      // Only error if file exists but couldn't be removed
+      fatalError("failed to remove %s\n", exFilename);
     }
   }
 }
@@ -101,25 +163,45 @@ uint32_t
 backup_doCrcVerify(const char* path)
 {
   uint32_t error = 0;
-   uint32_t crc;
-   if (crc32_sum(util_amigaBaseName(path), &crc) != 0) {
-     fatalError("crc32 failed for %s", util_amigaBaseName(path));
-   }
-   char buffer[PATH_MAX];
-   snprintf(buffer, sizeof(buffer),"ssum \"%s\"", path);
-   fflush(stdout);
-   char* result = util_execCapture(buffer);
-   if (!result) {
-     fatalError("remote crc32 failed for %s", util_amigaBaseName(path));
-   }
-   snprintf(buffer, sizeof(buffer), "%x\n", crc);
-   if (strcasecmp(buffer, result) != 0) {
-     //     fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
-     printf("CRC doesn't match! %s", path);
-     error = 1;
-   }
-   free(result);
-   return error;
+  uint32_t crc;
+  const char* basename = util_amigaBaseName(path);
+  
+  // Check if the local file exists
+  FILE* fp = fopen(basename, "rb");
+  if (!fp) {
+    // Local file not found - can happen when checking before download
+    return 2;  // Return code 2 means file not found
+  }
+  fclose(fp);
+  
+  if (crc32_sum(basename, &crc) != 0) {
+    printf("\xE2\x9D\x8C crc32 failed for %s!\n", basename); // Red X mark
+    fatalError("crc32 failed for %s", basename);
+  }
+  
+  char buffer[PATH_MAX];
+  snprintf(buffer, sizeof(buffer), "ssum \"%s\"", path);
+  fflush(stdout);
+  
+  char* result = util_execCapture(buffer);
+  if (!result) {
+    printf("\xE2\x9D\x8C remote crc32 failed for %s!\n", basename); // Red X mark
+    fatalError("remote crc32 failed for %s", basename);
+  }
+  
+  // Remove trailing newline if present
+  char* newline = strchr(result, '\n');
+  if (newline) *newline = '\0';
+  
+  snprintf(buffer, sizeof(buffer), "%x", crc);
+  if (strcasecmp(buffer, result) != 0) {
+    //     fatalError("crc32 verify failed for %s (%s,%s)", path, buffer, result);
+    printf("\xE2\x9D\x8C CRC doesn't match! %s\n", path); // Red X mark
+    error = 1;
+  }
+  
+  free(result);
+  return error;
 }
 
 static void
@@ -154,9 +236,12 @@ backup_backupList(dir_entry_list_t* list)
 	dir_freeEntry(temp);
 
 	if (backup_crcVerify) {
-	  if (backup_doCrcVerify(path) != 0) {
+	  int crcResult = backup_doCrcVerify(path);
+	  if (crcResult == 1) {
+	    // CRC mismatch, don't skip the download
 	    skip = 0;
 	  }
+	  // If crcResult == 2, file doesn't exist yet, we'll verify after download
 	}
       }
 
@@ -183,17 +268,34 @@ backup_backupList(dir_entry_list_t* list)
 	exall_saveExAllData(entry, path);
 
 	if (backup_crcVerify) {
-	  if (backup_doCrcVerify(path) != 0) {
+	  // Always perform CRC check after download
+	  int crcResult = backup_doCrcVerify(path);
+	  if (crcResult == 1) {
+	    // Don't clear the line when showing errors
+	    printf("\xE2\x9D\x8C CRC32 verification failed for %s!\n", path); // Red X mark
 	    fatalError("CRC32 verification failed for %s", path);
+	  } else if (crcResult == 2) {
+	    // This shouldn't happen after download, but just in case
+	    printf("\xE2\x9D\x8C Downloaded file not found: %s!\n", path); // Red X mark
+	    fatalError("CRC32 verification failed - downloaded file not found: %s", path);
 	  }
-	}
-
+	  
+	  // Only clear the line and show success message if verification succeeded
 #ifndef _WIN32
-	printf("\r%c[K", 27);
+	  printf("\r%c[K", 27);
 #else
-	printf("\r");
+	  printf("\r");
 #endif
-	printf("\xE2\x9C\x85 %s saving...done  \n", path); // utf-8 tick
+	  printf("\xE2\x9C\x85 %s saving...done (CRC OK)\n", path); // utf-8 tick with CRC verification
+	} else {
+	  // No CRC verification, just show completion message
+#ifndef _WIN32
+	  printf("\r%c[K", 27);
+#else
+	  printf("\r");
+#endif
+	  printf("\xE2\x9C\x85 %s saving...done  \n", path); // utf-8 tick
+	}
 	fflush(stdout);
       }
       free((void*)path);
