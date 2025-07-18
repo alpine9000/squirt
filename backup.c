@@ -124,11 +124,13 @@ backup_pruneFiles(const char* filename, void* data)
   dir_entry_t* entry = list->head;
   int found = 0;
   
-  // Check if this is a safe-named file (starts with "squirt_")
+  // Check if this is a safe-named file (starts with "squirt_") - only on Windows
   const char* originalName = filename;
+#ifdef _WIN32
   if (strncmp(filename, "squirt_", 7) == 0) {
     originalName = filename + 7; // Skip "squirt_" prefix to get original name
   }
+#endif
   
   while (entry) {
     // Compare with both the original name and the safe name

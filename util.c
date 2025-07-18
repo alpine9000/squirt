@@ -635,6 +635,7 @@ util_cd(const char* dir)
 }
 
 
+#ifdef _WIN32
 static int is_windows_reserved_name(const char* name) {
   // Convert to uppercase for case-insensitive comparison
   char upper_name[PATH_MAX];
@@ -678,6 +679,7 @@ static int is_windows_reserved_name(const char* name) {
   
   return 0;
 }
+#endif
 
 char*
 util_safeName(const char* name)
@@ -691,6 +693,8 @@ util_safeName(const char* name)
     return NULL;
   }
   
+#ifdef _WIN32
+  // Only apply Windows reserved name logic on Windows platforms
   // Check if this is a Windows reserved name
   int is_reserved = is_windows_reserved_name(name);
   
@@ -699,6 +703,7 @@ util_safeName(const char* name)
     strcpy(dest, "squirt_");
     dest += 7; // Length of "squirt_"
   }
+#endif
   
   // Copy the rest of the name, skipping colons
   while (*name) {

@@ -72,23 +72,27 @@ restore_fullPath(const char* name)
   return path;
 }
 
-// Like restore_fullPath but uses originalName (without squirt_ prefix if present)
+// Like restore_fullPath but uses originalName (without squirt_ prefix if present on Windows)
 static char*
 restore_fullOriginalPath(const char* name)
 {
   if (!restore_currentDir) {
-    // Check if name has squirt_ prefix and remove it if present
+#ifdef _WIN32
+    // Check if name has squirt_ prefix and remove it if present (Windows only)
     if (strncmp(name, "squirt_", 7) == 0) {
       return strdup(name + 7);
     }
+#endif
     return strdup(name);
   }
 
-  // Check if name has squirt_ prefix
+  // Check if name has squirt_ prefix (Windows only)
   const char* originalName = name;
+#ifdef _WIN32
   if (strncmp(name, "squirt_", 7) == 0) {
     originalName = name + 7;
   }
+#endif
 
   char* path = malloc(strlen(restore_currentDir) + strlen(originalName) + 2);
   if (!path) {
@@ -327,11 +331,13 @@ restore_operation(const char* filename, void* data)
     fatalError("failed to duplicate filename %s", filename);
   }
   
-  // Get original filename by removing "squirt_" prefix if present
+  // Get original filename by removing "squirt_" prefix if present (Windows only)
   const char* originalFilename = filename;
+#ifdef _WIN32
   if (strncmp(filename, "squirt_", 7) == 0) {
     originalFilename = filename + 7;
   }
+#endif
 
   // Create path with original filename for Amiga operations
   char* originalPath = restore_fullOriginalPath(filename);
