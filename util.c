@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #ifndef _WIN32
 #include <ftw.h>
@@ -634,21 +635,80 @@ util_cd(const char* dir)
 }
 
 
+static int is_windows_reserved_name(const char* name) {
+  // Convert to uppercase for case-insensitive comparison
+  char upper_name[PATH_MAX];
+  size_t len = strlen(name);
+  size_t i;
+  
+  if (len >= PATH_MAX) {
+    return 0; // Too long to be a reserved name
+  }
+  
+  for (i = 0; i < len; i++) {
+    upper_name[i] = toupper(name[i]);
+  }
+  upper_name[len] = '\0';
+  
+  // Check for base reserved names (exact match)
+  const char* reserved_names[] = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    NULL
+  };
+  
+  // First check for exact matches
+  for (i = 0; reserved_names[i] != NULL; i++) {
+    if (strcmp(upper_name, reserved_names[i]) == 0) {
+      return 1;
+    }
+  }
+  
+  // Then check for reserved names with extensions (name.ext)
+  char *dot = strchr(upper_name, '.');
+  if (dot) {
+    *dot = '\0'; // Temporarily truncate at the dot
+    for (i = 0; reserved_names[i] != NULL; i++) {
+      if (strcmp(upper_name, reserved_names[i]) == 0) {
+        return 1;
+      }
+    }
+  }
+  
+  return 0;
+}
+
 char*
 util_safeName(const char* name)
 {
-  char* safe = malloc(strlen(name)+1);
+  // Calculate required size: original length + potential "squirt_" prefix + null terminator
+  size_t safe_size = strlen(name) + 8; // "squirt_" (7) + null terminator (1)
+  char* safe = malloc(safe_size);
   char* dest = safe;
-  if (dest) {
-    while (*name) {
-      if (*name != ':') {
-	*dest = *name;
-	dest++;
-      }
-      name++;
-    }
-    *dest = 0;
+  
+  if (!dest) {
+    return NULL;
   }
-
+  
+  // Check if this is a Windows reserved name
+  int is_reserved = is_windows_reserved_name(name);
+  
+  // Add prefix for reserved names
+  if (is_reserved) {
+    strcpy(dest, "squirt_");
+    dest += 7; // Length of "squirt_"
+  }
+  
+  // Copy the rest of the name, skipping colons
+  while (*name) {
+    if (*name != ':') {
+      *dest = *name;
+      dest++;
+    }
+    name++;
+  }
+  *dest = 0;
+  
   return safe;
 }

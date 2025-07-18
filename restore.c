@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 
 
 #include "main.h"
@@ -71,6 +72,36 @@ restore_fullPath(const char* name)
   return path;
 }
 
+// Like restore_fullPath but uses originalName (without squirt_ prefix if present)
+static char*
+restore_fullOriginalPath(const char* name)
+{
+  if (!restore_currentDir) {
+    // Check if name has squirt_ prefix and remove it if present
+    if (strncmp(name, "squirt_", 7) == 0) {
+      return strdup(name + 7);
+    }
+    return strdup(name);
+  }
+
+  // Check if name has squirt_ prefix
+  const char* originalName = name;
+  if (strncmp(name, "squirt_", 7) == 0) {
+    originalName = name + 7;
+  }
+
+  char* path = malloc(strlen(restore_currentDir) + strlen(originalName) + 2);
+  if (!path) {
+    return NULL;
+  }
+  if (restore_currentDir[strlen(restore_currentDir)-1] != ':') {
+    sprintf(path, "%s/%s", restore_currentDir, originalName);
+  } else {
+    sprintf(path, "%s%s", restore_currentDir, originalName);
+  }
+  return path;
+}
+
 
 static char*
 restore_pushDir(const char* dir)
@@ -87,7 +118,63 @@ restore_pushDir(const char* dir)
   }
 
   if (util_cd(restore_currentDir) != 0) {
-    fatalError("unable to restore %s", restore_currentDir);
+    // Directory doesn't exist, try to create it
+    printf("Directory %s doesn't exist, creating it...\n", restore_currentDir);
+    
+    // Use CLI command to create the directory
+    char createDirCmd[PATH_MAX];
+    snprintf(createDirCmd, sizeof(createDirCmd), "makedir \"%s\"", restore_currentDir);
+    
+    if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_CLI) != 0) {
+      fatalError("failed to connect to squirtd server");
+    }
+    
+    if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, createDirCmd) != 0) {
+      fatalError("send() makedir command failed");
+    }
+    
+    // Read the command output using the same pattern as exec_cmd
+    uint8_t c;
+    char buffer[1024];
+    int bindex = 0;
+    int exitState = 0;
+    while (util_recv(main_socketFd, &c, 1, 0)) {
+      if (c == 0) {
+        exitState++;
+        if (exitState == 4) {
+          break;
+        }
+      } else if (c == 0x9B) {
+        buffer[bindex] = 0;
+        // Optionally print output for debugging
+        // printf("%s", buffer);
+        bindex = 0;
+      } else {
+        buffer[bindex++] = c;
+        if (c == '\n' || bindex == sizeof(buffer)-1) {
+          buffer[bindex] = 0;
+          // Optionally print output for debugging
+          // printf("%s", buffer);
+          bindex = 0;
+        }
+      }
+    }
+    
+    uint32_t error;
+    if (util_recvU32(main_socketFd, &error) != 0) {
+      fatalError("makedir: failed to read remote status");
+    }
+    
+    if (error != 0) {
+      fatalError("failed to create directory %s (error: %d)", restore_currentDir, error);
+    }
+    
+    printf("Directory %s created successfully\n", restore_currentDir);
+    
+    // Now try to change to the directory again
+    if (util_cd(restore_currentDir) != 0) {
+      fatalError("unable to restore %s even after creating it", restore_currentDir);
+    }
   }
 
   char* safe = util_safeName(dir);
@@ -232,6 +319,23 @@ restore_operation(const char* filename, void* data)
   dir_entry_t* entry = data;
   char* path = restore_fullPath(filename);
 
+  // On restore, filename is already the safe filename (with prefix)
+  // We need to use it as source for reading, but send the original name to Amiga
+  char* safeFilename = strdup(filename);
+  if (!safeFilename) {
+    free(path);
+    fatalError("failed to duplicate filename %s", filename);
+  }
+  
+  // Get original filename by removing "squirt_" prefix if present
+  const char* originalFilename = filename;
+  if (strncmp(filename, "squirt_", 7) == 0) {
+    originalFilename = filename + 7;
+  }
+
+  // Create path with original filename for Amiga operations
+  char* originalPath = restore_fullOriginalPath(filename);
+
   int isDir = util_isDirectory(filename);
   restore_update_t update = restore_remoteFileNeedsUpdating(filename, isDir, entry);
 
@@ -250,8 +354,8 @@ restore_operation(const char* filename, void* data)
       printf("\xE2\x8C\x9B %s restoring...", path); // utf-8 hourglass
       fflush(stdout);
 
-      if (restore_updateExAll(filename, path) != 0) {
-	fatalError("failed to update ExAll for %s", filename);
+      if (restore_updateExAll(originalFilename, originalPath) != 0) {
+	fatalError("failed to update ExAll for %s", originalFilename);
       }
 
 #ifndef _WIN32
@@ -275,14 +379,16 @@ restore_operation(const char* filename, void* data)
       printf("\xE2\x8C\x9B %s restoring...", path); // utf-8 hourglass
       fflush(stdout);
       char updateMessage[PATH_MAX];
-      snprintf(updateMessage, sizeof(updateMessage), "%s restoring...", path);
-      if (squirt_file(filename, updateMessage, path, 1, restore_printProgress) != 0) {
+      sprintf(updateMessage, "\xE2\x9C\x85 %s updating...", path);
+      
+      // When restoring to Amiga, use the original filename as destination
+      // but read from local safe filename
+      if (squirt_file(safeFilename, updateMessage, originalFilename, 1, restore_printProgress) != 0) {
 	fatalError("failed to restore %s\n", path);
       }
-      if (restore_updateExAll(filename, path) != 0) {
-	fatalError("failed to update ExAll for %s", filename);
+      if (restore_updateExAll(originalFilename, originalPath) != 0) {
+	fatalError("failed to update ExAll for %s", originalFilename);
       }
-
       if (restore_crcVerify) {
 	if (backup_doCrcVerify(path) != 0) {
 	  fatalError("crc32 checksum failed for %s", path);
@@ -310,6 +416,7 @@ restore_operation(const char* filename, void* data)
     }
   }
 
+  free(originalPath);
   free(path);
 }
 
@@ -359,7 +466,63 @@ restore_restoreDir(const char* remote)
   char* local = restore_pushDir(remote);
 
   if (dir_process(restore_currentDir, restore_list) != 0) {
-    fatalError("unable to read %s", remote);
+    // Directory doesn't exist, try to create it
+    printf("Directory %s doesn't exist, creating it...\n", remote);
+    
+    // Use CLI command to create the directory
+    char createDirCmd[PATH_MAX];
+    snprintf(createDirCmd, sizeof(createDirCmd), "makedir \"%s\"", remote);
+    
+    if (util_sendCommand(main_socketFd, SQUIRT_COMMAND_CLI) != 0) {
+      fatalError("failed to connect to squirtd server");
+    }
+    
+    if (util_sendLengthAndUtf8StringAsLatin1(main_socketFd, createDirCmd) != 0) {
+      fatalError("send() makedir command failed");
+    }
+    
+    // Read the command output using the same pattern as exec_cmd
+    uint8_t c;
+    char buffer[1024];
+    int bindex = 0;
+    int exitState = 0;
+    while (util_recv(main_socketFd, &c, 1, 0)) {
+      if (c == 0) {
+        exitState++;
+        if (exitState == 4) {
+          break;
+        }
+      } else if (c == 0x9B) {
+        buffer[bindex] = 0;
+        // Optionally print output for debugging
+        // printf("%s", buffer);
+        bindex = 0;
+      } else {
+        buffer[bindex++] = c;
+        if (c == '\n' || bindex == sizeof(buffer)-1) {
+          buffer[bindex] = 0;
+          // Optionally print output for debugging
+          // printf("%s", buffer);
+          bindex = 0;
+        }
+      }
+    }
+    
+    uint32_t error;
+    if (util_recvU32(main_socketFd, &error) != 0) {
+      fatalError("makedir: failed to read remote status");
+    }
+    
+    if (error != 0) {
+      fatalError("failed to create directory %s (error: %d)", remote, error);
+    }
+    
+    printf("Directory %s created successfully\n", remote);
+    
+    // Now try to read the directory again
+    if (dir_process(restore_currentDir, restore_list) != 0) {
+      fatalError("unable to read %s even after creating it", remote);
+    }
   }
 
   restore_popDir(local);
@@ -461,6 +624,25 @@ restore_main(int argc, char* argv[])
 
   if (dir) {
     restore_restoreDir(dir);
+    
+    // Change back to parent directory to release lock on created directory
+    // This prevents "object in use" errors when trying to delete the directory
+    char* parentDir = strdup(restore_dirBuffer ? restore_dirBuffer : "work:");
+    if (parentDir) {
+      // Remove the subdirectory part to get parent
+      char* lastColon = strrchr(parentDir, ':');
+      if (lastColon && *(lastColon + 1) != '\0') {
+        // If there's content after the colon, it's a subdirectory
+        *(lastColon + 1) = '\0'; // Keep just "work:"
+      }
+      
+      printf("Releasing directory lock by changing to %s\n", parentDir);
+      if (util_cd(parentDir) != 0) {
+        // If we can't change to parent, try changing to root of the device
+        printf("Warning: Could not change to parent directory\n");
+      }
+      free(parentDir);
+    }
   }
 
   printf("\nrestore complete!\n");

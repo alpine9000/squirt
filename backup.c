@@ -123,8 +123,16 @@ backup_pruneFiles(const char* filename, void* data)
   dir_entry_list_t* list = data;
   dir_entry_t* entry = list->head;
   int found = 0;
+  
+  // Check if this is a safe-named file (starts with "squirt_")
+  const char* originalName = filename;
+  if (strncmp(filename, "squirt_", 7) == 0) {
+    originalName = filename + 7; // Skip "squirt_" prefix to get original name
+  }
+  
   while (entry) {
-    if (strcmp(entry->name, filename) == 0) {
+    // Compare with both the original name and the safe name
+    if (strcmp(entry->name, filename) == 0 || strcmp(entry->name, originalName) == 0) {
      found = 1;
       break;
     }
@@ -166,18 +174,28 @@ backup_doCrcVerify(const char* path)
   uint32_t crc;
   const char* basename = util_amigaBaseName(path);
   
+  // Use util_safeName to handle Windows reserved filenames
+  char* safeBaseName = util_safeName(basename);
+  if (!safeBaseName) {
+    fatalError("memory allocation failed for safe filename");
+  }
+  
   // Check if the local file exists
-  FILE* fp = fopen(basename, "rb");
+  FILE* fp = fopen(safeBaseName, "rb");
   if (!fp) {
-    // Local file not found - can happen when checking before download
+    //printf("\xE2\x9D\x8C Downloaded file not found: %s\n", path); // Red X mark
+    free(safeBaseName);
     return 2;  // Return code 2 means file not found
   }
   fclose(fp);
   
-  if (crc32_sum(basename, &crc) != 0) {
+  if (crc32_sum(safeBaseName, &crc) != 0) {
     printf("\xE2\x9D\x8C crc32 failed for %s!\n", basename); // Red X mark
+    free(safeBaseName);
     fatalError("crc32 failed for %s", basename);
   }
+  
+  free(safeBaseName);
   
   char buffer[PATH_MAX];
   snprintf(buffer, sizeof(buffer), "ssum \"%s\"", path);
@@ -534,8 +552,26 @@ backup_main(int argc, char* argv[])
 
   if (dir) {
     backup_backupDir(dir);
+    
+    // Change back to parent directory to release lock on last backed up directory
+    // This prevents "object in use" errors when trying to delete the directory
+    char* parentDir = strdup(backup_dirBuffer ? backup_dirBuffer : "work:");
+    if (parentDir) {
+      // Remove the subdirectory part to get parent
+      char* lastColon = strrchr(parentDir, ':');
+      if (lastColon && *(lastColon + 1) != '\0') {
+        // If there's content after the colon, it's a subdirectory
+        *(lastColon + 1) = '\0'; // Keep just "work:"
+      }
+      
+      printf("Releasing directory lock by changing to %s\n", parentDir);
+      if (util_cd(parentDir) != 0) {
+        // If we can't change to parent, try changing to root of the device
+        printf("Warning: Could not change to parent directory\n");
+      }
+      free(parentDir);
+    }
   }
-
 
   printf("\nbackup complete!\n");
 }

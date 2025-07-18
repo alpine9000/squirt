@@ -75,18 +75,26 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   util_mkdir(ident, 0777);
-  char* name = malloc(strlen(baseName)+1+strlen(ident));
-  if (!name) {
+  
+  // Use util_safeName to handle Windows reserved filenames for metadata files
+  char* safeBaseName = util_safeName(baseName);
+  if (!safeBaseName) {
     return 0;
   }
-  sprintf(name, "%s%s", ident, baseName);
+  
+  char* name = malloc(strlen(safeBaseName)+1+strlen(ident));
+  if (!name) {
+    free(safeBaseName);
+    return 0;
+  }
+  sprintf(name, "%s%s", ident, safeBaseName);
   FILE *fp = fopen(name, "w");
 
   if (!fp) {
     free(name);
+    free(safeBaseName);
     return 0;
   }
-
 
   struct timeval tv ;
   int sec = entry->ds.ticks / 50;
@@ -98,8 +106,14 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
   struct utimbuf ut;
 
   struct stat st;
+  
+  // Use util_safeName to handle Windows reserved filenames
+  char* safeBaseNameForFile = util_safeName(baseName);
+  if (!safeBaseNameForFile) {
+    fatalError("memory allocation failed for safe filename");
+  }
 
-  if (stat(baseName, &st) != 0) {
+  if (stat(safeBaseNameForFile, &st) != 0) {
     fatalError("failed to get file attributes of %s\n", baseName);
   }
 
@@ -110,9 +124,11 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
 #ifdef _WIN32
       !S_ISDIR(st.st_mode) &&
 #endif
-      utime(baseName, &ut) != 0) {
+      utime(safeBaseNameForFile, &ut) != 0) {
     fatalError("failed to set file attributes of %s\n", baseName);
   }
+  
+  free(safeBaseNameForFile); // Free the allocated safe name
 
   fprintf(fp, "name:%s\n", entry->name);
   fprintf(fp, "type:%d\n", entry->type);
@@ -129,6 +145,7 @@ exall_saveExAllData(dir_entry_t* entry, const char* path)
   fclose(fp);
 
   free(name);
+  free(safeBaseName);
   return 1;
 }
 
@@ -143,12 +160,35 @@ exall_readExAllData(dir_entry_t* entry, const char* path)
   const char* baseName = util_amigaBaseName(path);
   const char* ident = SQUIRT_EXALL_INFO_DIR_NAME;
   util_mkdir(ident, 0777);
-  char* name = malloc(strlen(baseName)+1+strlen(ident));
-  if (!name) {
+  
+  // Use util_safeName to handle Windows reserved filenames for metadata files
+  char* safeBaseName = util_safeName(baseName);
+  if (!safeBaseName) {
     return 0;
   }
-  sprintf(name, "%s%s", ident, baseName);
+  
+  // First try with the safe name (current approach)
+  char* name = malloc(strlen(safeBaseName)+1+strlen(ident));
+  if (!name) {
+    free(safeBaseName);
+    return 0;
+  }
+  sprintf(name, "%s%s", ident, safeBaseName);
   FILE *fp = fopen(name, "r+");
+  
+  // If file not found, try with the original name (backward compatibility)
+  if (!fp) {
+    free(name);
+    name = malloc(strlen(baseName)+1+strlen(ident));
+    if (!name) {
+      free(safeBaseName);
+      return 0;
+    }
+    sprintf(name, "%s%s", ident, baseName);
+    fp = fopen(name, "r+");
+  }
+  
+  free(safeBaseName);
   if (!fp) {
     char* cwd = getcwd(0, 0);
     if (!cwd) {
