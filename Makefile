@@ -38,23 +38,23 @@ build/obj/%.o: %.c $(HEADERS) $(COMMON_DEPS)
 
 build/obj/amiga/%.o: %.c $(COMMON_DEPS)
 	@mkdir -p build/obj/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) $*.c -c -o build/obj/amiga/$*.o
+	$(AMIGA_BIN) $(AMIGA_GCC_CFLAGS) $*.c -c -o build/obj/amiga/$*.o
 
 build/amiga/squirtd: squirtd.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) squirtd.c -s $(AMIGA_SQUIRTD_CFLAGS) $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
+	$(AMIGA_BIN) squirtd.c -s $(AMIGA_SQUIRTD_CFLAGS) $(SQUIRTD_AMIGA_GCC_OBJS) -o build/amiga/squirtd -lamiga
 
 build/amiga/ssum: build/obj/amiga/crc32.o build/obj/amiga/sum.o crc32.h $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_GCC_CFLAGS) -s build/obj/amiga/crc32.o build/obj/amiga/sum.o -o build/amiga/ssum -lamiga
+	$(AMIGA_BIN) $(AMIGA_GCC_CFLAGS) -s build/obj/amiga/crc32.o build/obj/amiga/sum.o -o build/amiga/ssum -lamiga
 
 build/amiga/skill: kill.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_SQUIRTD_CFLAGS) -s kill.c -o build/amiga/skill -lamiga
+	$(AMIGA_BIN) $(AMIGA_SQUIRTD_CFLAGS) -s kill.c -o build/amiga/skill -lamiga
 
 build/amiga/sps: ps.c $(COMMON_DEPS)
 	@mkdir -p build/amiga
-	$(AMIGA_GCC) $(AMIGA_SQUIRTD_CFLAGS) -s ps.c -o build/amiga/sps -lamiga
+	$(AMIGA_BIN) $(AMIGA_SQUIRTD_CFLAGS) -s ps.c -o build/amiga/sps -lamiga
 
 install: all
 	cp $(HOST_CLIENT_APPS) /usr/local/bin/
