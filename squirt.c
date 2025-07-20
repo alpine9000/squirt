@@ -7,6 +7,7 @@
 #include <libgen.h>
 #include <getopt.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 
@@ -42,7 +43,8 @@ squirt_file(const char* filename, const char* progressHeader, const char* destFi
   struct timeval start, end;
 
   if (stat(filename, &st) == -1) {
-    fatalError("filed to stat %s", filename);
+    fprintf(stderr, "Error: Cannot access file '%s' - %s\n", filename, strerror(errno));
+    return -1; // Return error code instead of terminating
   }
 
   fileLength = st.st_size;
