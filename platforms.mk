@@ -17,7 +17,7 @@ ifneq (,$(findstring MINGW64,$(UNAME_S)))
 PLATFORM=mingw64
 endif
 
-MINGW_LIBS=-lws2_32 -liconv
+MINGW_LIBS=-lws2_32 -liconv -static
 
 ifeq ($(PLATFORM),osx)
 # OSX

@@ -1,11 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include "main.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <conio.h>
+#else
 #include <unistd.h>
 #include <termios.h>
 #include <sys/ioctl.h>
-#include <ctype.h>
-#include "main.h"
+#endif
 
 // Custom input wrapper - no more readline dependency!
 
@@ -39,7 +45,12 @@ static void reset_tab_tracking(void) {
 }
 
 // Terminal control
+#ifdef _WIN32
+static HANDLE hStdin;
+static DWORD original_mode;
+#else
 static struct termios original_termios;
+#endif
 int _srl_inside_quotes_flag = 0;
 static int terminal_setup = 0;
 
@@ -58,6 +69,11 @@ static int history_index = -1;
 static void enable_raw_mode(void) {
     if (terminal_setup) return;
     
+#ifdef _WIN32
+    hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    GetConsoleMode(hStdin, &original_mode);
+    SetConsoleMode(hStdin, ENABLE_PROCESSED_INPUT);
+#else
     tcgetattr(STDIN_FILENO, &original_termios);
     struct termios raw = original_termios;
     
@@ -70,6 +86,7 @@ static void enable_raw_mode(void) {
     raw.c_cc[VTIME] = 0;
     
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+#endif
     terminal_setup = 1;
 }
 
@@ -80,7 +97,11 @@ static void disable_raw_mode(void) {
     printf("\r\033[K"); // \r = move to column 1, \033[K = clear to end of line
     fflush(stdout);
     
+#ifdef _WIN32
+    SetConsoleMode(hStdin, original_mode);
+#else
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios);
+#endif
     terminal_setup = 0;
 }
 
@@ -432,7 +453,11 @@ srl_gets(void)
     // Main input loop
     while (1) {
         char c;
+#ifdef _WIN32
+        c = _getch(); // Windows console input
+#else
         if (read(STDIN_FILENO, &c, 1) != 1) continue;
+#endif
         
         if (c == '\r' || c == '\n') {
             // Enter pressed - finish input
@@ -458,10 +483,15 @@ srl_gets(void)
         } else if (c == 27) {
             // Escape sequence - handle arrow keys
             char seq[3];
+#ifdef _WIN32
+            seq[0] = _getch();
+            seq[1] = _getch();
+#else
             ssize_t n1 = read(STDIN_FILENO, &seq[0], 1);
             if (n1 != 1) continue;
             ssize_t n2 = read(STDIN_FILENO, &seq[1], 1);
             if (n2 != 1) continue;
+#endif
             
             if (seq[0] == '[') {
                 switch (seq[1]) {
