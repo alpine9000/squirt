@@ -1,72 +1,557 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <ctype.h>
 #include "main.h"
 
-#include <readline/readline.h>
-#include <readline/history.h>
+// Custom input wrapper - no more readline dependency!
 
+// Input buffer and cursor management
+#define MAX_INPUT_LENGTH 1024
+
+// Custom input wrapper state
 static char* srl_line_read = 0;
 static const char* (*_srl_prompt)(void);
-static void (*_srl_complete_hook)(const char* text);
+static void (*_srl_complete_hook)(const char* text, const char* full_command_line);
 static char* (*_srl_generator)(int* list_index, const char* text, int len);
 
-static char *
-srl_generator(const char *text, int state)
-{
-  static int list_index, len;
+// Two-stage tab completion tracking
+static char last_completion_buffer[MAX_INPUT_LENGTH];
+static int last_completion_cursor = -1;
+static int last_completion_length = -1;
 
-  if (!state) {
-    list_index = 0;
-    len = strlen(text);
-  }
+// Forward declarations
+static void reset_tab_tracking(void);
+static void enable_raw_mode(void);
+static void disable_raw_mode(void);
+static void refresh_line(void);
+static void add_to_history(const char* line);
+static void handle_tab_completion(void);
+static void load_history(void);
 
-  if (text && text[0] == '!') {
-    char* real = rl_filename_completion_function(&text[1], state);
-
-    if (real) {
-      if (util_isDirectory(real)) {
-	rl_completion_append_character = '/';
-      } else {
-	rl_completion_append_character = ' ';
-      }
-      char* fake = malloc(strlen(real)+2);
-      sprintf(fake, "!%s", real);
-      free(real);
-      return fake;
-    } else {
-      return 0;
-    }
-  }
-
-  if (_srl_generator) {
-    return _srl_generator(&list_index, text, len);
-  } else {
-    return 0;
-  }
+// Reset tab completion tracking
+static void reset_tab_tracking(void) {
+    last_completion_cursor = -1;
+    last_completion_length = -1;
 }
 
+// Terminal control
+static struct termios original_termios;
+int _srl_inside_quotes_flag = 0;
+static int terminal_setup = 0;
+
+// Input buffer and cursor management
+static char input_buffer[MAX_INPUT_LENGTH];
+static int cursor_pos = 0;
+static int buffer_length = 0;
+
+// History management
+#define MAX_HISTORY_ENTRIES 100
+static char* history[MAX_HISTORY_ENTRIES];
+static int history_count = 0;
+static int history_index = -1;
+
+// Terminal control functions
+static void enable_raw_mode(void) {
+    if (terminal_setup) return;
+    
+    tcgetattr(STDIN_FILENO, &original_termios);
+    struct termios raw = original_termios;
+    
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+    raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+    raw.c_cflag |= CS8;
+    raw.c_oflag &= ~(OPOST);
+    
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    terminal_setup = 1;
+}
+
+static void disable_raw_mode(void) {
+    if (!terminal_setup) return;
+    
+    // Robust terminal cleanup: move cursor to column 1 and clear line
+    printf("\r\033[K"); // \r = move to column 1, \033[K = clear to end of line
+    fflush(stdout);
+    
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios);
+    terminal_setup = 0;
+}
+
+// Cursor and display functions
+
+static void refresh_line(void) {
+    printf("\r\033[K"); // Clear line
+    printf("%s", _srl_prompt ? _srl_prompt() : "");
+    printf("%.*s", buffer_length, input_buffer);
+    
+    // Move cursor to correct position
+    int chars_after_cursor = buffer_length - cursor_pos;
+    if (chars_after_cursor > 0) {
+        printf("\033[%dD", chars_after_cursor);
+    }
+    fflush(stdout);
+}
+
+// History functions
+static void add_to_history(const char* line) {
+    if (!line || !*line) return;
+    
+    // Check if same as last entry
+    if (history_count > 0 && strcmp(history[history_count-1], line) == 0) {
+        return;
+    }
+    
+    if (history_count >= MAX_HISTORY_ENTRIES) {
+        free(history[0]);
+        for (int i = 0; i < MAX_HISTORY_ENTRIES-1; i++) {
+            history[i] = history[i+1];
+        }
+        history_count = MAX_HISTORY_ENTRIES - 1;
+    }
+    
+    history[history_count++] = strdup(line);
+}
+
+// Tab completion handling
+static void handle_tab_completion(void) {
+    if (!_srl_complete_hook || !_srl_generator) return;
+    
+    // Extract text for completion from current buffer position
+    char completion_text[MAX_INPUT_LENGTH];
+    int completion_start = cursor_pos;
+    
+    // Smart completion start detection - handle quotes properly
+    // Find the opening quote by looking for unmatched quotes
+    int quote_start = -1;
+    int quote_count = 0;
+    for (int i = cursor_pos - 1; i >= 0; i--) {
+        if (input_buffer[i] == '"') {
+            quote_count++;
+            // If odd number of quotes, this is an opening quote
+            if (quote_count % 2 == 1) {
+                quote_start = i;
+            } else {
+                // Even number means we've closed a quote, reset
+                quote_start = -1;
+            }
+        }
+    }
+    
+    if (quote_start >= 0) {
+        // We're inside quotes - completion starts after the quote
+        completion_start = quote_start + 1;
+    } else {
+        // Normal completion - go back until space or start of line
+        while (completion_start > 0 && input_buffer[completion_start-1] != ' ') {
+            completion_start--;
+        }
+    }
+    
+    int completion_len = cursor_pos - completion_start;
+    strncpy(completion_text, &input_buffer[completion_start], completion_len);
+    completion_text[completion_len] = '\0';
+    
+    // Store quote context in a simple global flag for the completion generator
+    _srl_inside_quotes_flag = (quote_start >= 0);
+    
+    // Extract quoted path information if needed (declare at function scope)
+    char full_quoted_path[1000];
+    int quoted_len = 0;
+    
+    // For quoted paths, we need to pass the full quoted path context, not just the completion text
+    if (quote_start >= 0) {
+        // Extract the full path inside quotes for proper base directory parsing
+        // Find the closing quote or use cursor position
+        int quote_end = cursor_pos;
+        for (int i = quote_start + 1; i < cursor_pos; i++) {
+            if (input_buffer[i] == '"') {
+                quote_end = i;
+                break;
+            }
+        }
+        quoted_len = quote_end - quote_start - 1;  // Content between quotes
+        strncpy(full_quoted_path, &input_buffer[quote_start + 1], quoted_len);
+        full_quoted_path[quoted_len] = '\0';
+
+        _srl_complete_hook(full_quoted_path, input_buffer);
+    } else {
+        _srl_complete_hook(completion_text, input_buffer);
+    }
+    
+    // Collect all possible completions to handle ambiguity
+    char* completions[50]; // Max 50 completions
+    int completion_count = 0;
+    int list_index = 0;
+    
+    // Gather all matching completions
+    char* completion;
+    while ((completion = _srl_generator(&list_index, completion_text, completion_len)) != NULL && completion_count < 50) {
+        completions[completion_count++] = completion;
+    }
+    
+    if (completion_count == 0) {
+        // No completions found
+        return;
+    } else if (completion_count == 1) {
+        // Single completion - use it directly
+        completion = completions[0];
+    } else {
+        // Multiple completions - find longest common prefix and complete partially
+        
+        // Find longest common prefix among all completions (beyond what user already typed)
+        int extended_common_len = 0;
+        if (completion_count > 1) {
+            char* first = completions[0];
+            int first_len = strlen(first);
+            
+            // Start comparison from where the user's input would end in the completion
+            // Find where user input ends in the first completion
+            int user_part_end = -1;
+            
+            // For quoted paths, we need to find where the typed part ends
+            if (quote_start >= 0) {
+                // User typed something like "My Files/NetMon/n", we want to find where 'n' ends
+                // in completions like "My Files/NetMon/NetMon.info"
+                user_part_end = strlen(full_quoted_path);
+            } else {
+                user_part_end = completion_len;
+            }
+            
+            // Find common prefix starting from where user input ends (case-insensitive)
+            for (int i = user_part_end; i < first_len; i++) {
+                char c = first[i];
+                int all_match = 1;
+                for (int j = 1; j < completion_count; j++) {
+                    if (i >= (int)strlen(completions[j]) || tolower(completions[j][i]) != tolower(c)) {
+                        all_match = 0;
+                        break;
+                    }
+                }
+                if (all_match) {
+                    extended_common_len = i + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        // Check if this is a consecutive tab press (two-stage completion)
+        int is_consecutive_tab = (last_completion_cursor == cursor_pos && 
+                                  last_completion_length == buffer_length &&
+                                  strncmp(last_completion_buffer, input_buffer, buffer_length) == 0);
+        
+        // If we can complete more than what's currently typed, do partial completion
+        if (extended_common_len > 0 && !is_consecutive_tab) {
+            // First tab: Complete to the longest common prefix (no suggestions yet)
+            char* partial_completion = malloc(extended_common_len + 1);
+            strncpy(partial_completion, completions[0], extended_common_len);
+            partial_completion[extended_common_len] = '\0';
+            
+            // Replace the input with the partial completion
+            int replace_len = completion_len;
+            int new_len = extended_common_len;
+            int size_diff = new_len - replace_len;
+            
+            if (buffer_length + size_diff < MAX_INPUT_LENGTH) {
+                // Make space in buffer if needed
+                if (size_diff > 0) {
+                    memmove(&input_buffer[cursor_pos + size_diff], 
+                           &input_buffer[cursor_pos], 
+                           buffer_length - cursor_pos);
+                } else if (size_diff < 0) {
+                    memmove(&input_buffer[cursor_pos + size_diff], 
+                           &input_buffer[cursor_pos], 
+                           buffer_length - cursor_pos);
+                }
+                
+                // Insert the partial completion
+                memcpy(&input_buffer[cursor_pos - replace_len], partial_completion, new_len);
+                cursor_pos += size_diff;
+                buffer_length += size_diff;
+                
+                refresh_line();
+            }
+            
+            
+            // Update tab completion tracking for next tab press
+            last_completion_cursor = cursor_pos;
+            last_completion_length = buffer_length;
+            memcpy(last_completion_buffer, input_buffer, buffer_length);
+            
+            free(partial_completion);
+            return; // Don't show suggestions on first tab - only partial completion
+        }
+        
+        // Second tab or no partial completion possible - display all matches
+        if (is_consecutive_tab || extended_common_len == 0) {
+            printf("\n");
+            // Move cursor to column 1 for proper alignment of suggestions
+            printf("\r");
+        
+            // Find common directory prefix among all completions for display
+            int display_prefix_len = 0;
+            if (completion_count > 1) {
+            // Find the last '/' or ':' in the first completion
+            char* first = completions[0];
+            char* last_sep = NULL;
+            for (char* p = first; *p; p++) {
+                if (*p == '/' || *p == ':') {
+                    last_sep = p + 1; // Point after the separator
+                }
+            }
+            if (last_sep) {
+                display_prefix_len = last_sep - first;
+                // Verify all completions share this prefix
+                for (int i = 1; i < completion_count; i++) {
+                    if (strncmp(first, completions[i], display_prefix_len) != 0) {
+                        display_prefix_len = 0; // No common prefix
+                        break;
+                    }
+                }
+            }
+            }
+        
+            for (int i = 0; i < completion_count; i++) {
+            // First strip quotes from the full completion, then apply prefix logic
+            char* full_completion = completions[i];
+            char clean_completion[1024];
+            
+            // Strip quotes from the full completion first (handle both leading and trailing quotes)
+            strcpy(clean_completion, full_completion);
+            int needs_cleaning = 0;
+            
+            // Remove leading quote if present
+            if (clean_completion[0] == '"' && strlen(clean_completion) > 1) {
+                memmove(clean_completion, clean_completion + 1, strlen(clean_completion));
+                needs_cleaning = 1;
+            }
+            
+            // Remove trailing quote if present
+            int len = strlen(clean_completion);
+            if (len > 0 && clean_completion[len - 1] == '"') {
+                clean_completion[len - 1] = '\0';
+                needs_cleaning = 1;
+            }
+            
+            if (needs_cleaning) {
+                full_completion = clean_completion;
+            }
+            
+            // Now apply directory prefix stripping to the clean completion
+            char* display_name = full_completion + display_prefix_len;
+            
+                printf("%s  ", display_name);
+            }
+            printf("\n");
+        
+            // Properly refresh the current line using our existing refresh function
+            refresh_line();
+            fflush(stdout);
+        
+            // Free all completion strings
+            for (int i = 0; i < completion_count; i++) {
+                free(completions[i]);
+            }
+            
+            // Reset tab completion tracking after showing suggestions
+            last_completion_cursor = -1;
+            last_completion_length = -1;
+            
+            return;
+        }
+    }
+    
+    // Single completion processing continues here
+    {
+        // Calculate how much text to replace
+        int replace_len = completion_len;
+        int new_len = strlen(completion);
+        
+        // Make space in buffer if needed
+        int size_diff = new_len - replace_len;
+        if (buffer_length + size_diff >= MAX_INPUT_LENGTH) {
+            free(completion);
+            return; // Buffer would overflow
+        }
+        
+        // Move text after cursor if growing
+        if (size_diff > 0) {
+            memmove(&input_buffer[cursor_pos + size_diff], 
+                   &input_buffer[cursor_pos], 
+                   buffer_length - cursor_pos);
+        } else if (size_diff < 0) {
+            memmove(&input_buffer[cursor_pos + size_diff], 
+                   &input_buffer[cursor_pos], 
+                   buffer_length - cursor_pos);
+        }
+        
+        // Replace the text
+        memcpy(&input_buffer[completion_start], completion, new_len);
+        
+        // Update positions
+        buffer_length += size_diff;
+        cursor_pos = completion_start + new_len;
+        
+        // Perfect display: No corruption, no extra spaces!
+        refresh_line();
+    }
+    
+    // Free all completion strings
+    for (int i = 0; i < completion_count; i++) {
+        free(completions[i]);
+    }
+}
 
 char *
 srl_gets(void)
 {
-  if (srl_line_read) {
-    free(srl_line_read);
-    srl_line_read = (char *)NULL;
-  }
-
-
-  srl_line_read = readline(_srl_prompt ? _srl_prompt() :  "");
-
-  if (srl_line_read && *srl_line_read) {
-    add_history (srl_line_read);
-  }
-
-  return (srl_line_read);
+    if (srl_line_read) {
+        free(srl_line_read);
+        srl_line_read = NULL;
+    }
+    
+    enable_raw_mode();
+    
+    // Initialize input state
+    cursor_pos = 0;
+    buffer_length = 0;
+    history_index = -1;
+    memset(input_buffer, 0, MAX_INPUT_LENGTH);
+    
+    // Display prompt
+    printf("%s", _srl_prompt ? _srl_prompt() : "");
+    fflush(stdout);
+    
+    // Main input loop
+    while (1) {
+        char c;
+        if (read(STDIN_FILENO, &c, 1) != 1) continue;
+        
+        if (c == '\r' || c == '\n') {
+            // Enter pressed - finish input
+            printf("\n");
+            break;
+            
+        } else if (c == '\t') {
+            // Tab pressed - handle completion
+            handle_tab_completion();
+            
+        } else if (c == 127 || c == '\b') {
+            // Backspace
+            reset_tab_tracking(); // Reset tab completion tracking
+            if (cursor_pos > 0) {
+                memmove(&input_buffer[cursor_pos-1], 
+                       &input_buffer[cursor_pos], 
+                       buffer_length - cursor_pos);
+                cursor_pos--;
+                buffer_length--;
+                refresh_line();
+            }
+            
+        } else if (c == 27) {
+            // Escape sequence - handle arrow keys
+            char seq[3];
+            ssize_t n1 = read(STDIN_FILENO, &seq[0], 1);
+            if (n1 != 1) continue;
+            ssize_t n2 = read(STDIN_FILENO, &seq[1], 1);
+            if (n2 != 1) continue;
+            
+            if (seq[0] == '[') {
+                switch (seq[1]) {
+                    case 'A': // Up arrow - previous history
+                        reset_tab_tracking(); // Reset tab completion tracking
+                        if (history_count > 0) {
+                            if (history_index == -1) history_index = history_count - 1;
+                            else if (history_index > 0) history_index--;
+                            
+                            if (history_index >= 0) {
+                                strcpy(input_buffer, history[history_index]);
+                                buffer_length = strlen(input_buffer);
+                                cursor_pos = buffer_length;
+                                refresh_line();
+                            }
+                        }
+                        break;
+                        
+                    case 'B': // Down arrow - next history
+                        reset_tab_tracking(); // Reset tab completion tracking
+                        if (history_index >= 0) {
+                            history_index++;
+                            if (history_index >= history_count) {
+                                history_index = -1;
+                                input_buffer[0] = '\0';
+                                buffer_length = 0;
+                                cursor_pos = 0;
+                            } else {
+                                strcpy(input_buffer, history[history_index]);
+                                buffer_length = strlen(input_buffer);
+                                cursor_pos = buffer_length;
+                            }
+                            refresh_line();
+                        }
+                        break;
+                        
+                    case 'C': // Right arrow
+                        reset_tab_tracking(); // Reset tab completion tracking
+                        if (cursor_pos < buffer_length) {
+                            cursor_pos++;
+                            printf("\033[C");
+                            fflush(stdout);
+                        }
+                        break;
+                        
+                    case 'D': // Left arrow
+                        reset_tab_tracking(); // Reset tab completion tracking
+                        if (cursor_pos > 0) {
+                            cursor_pos--;
+                            printf("\033[D");
+                            fflush(stdout);
+                        }
+                        break;
+                }
+            }
+            
+        } else if (c >= 32 && c <= 126) {
+            // Regular printable character
+            reset_tab_tracking(); // Reset tab completion tracking
+            if (buffer_length < MAX_INPUT_LENGTH - 1) {
+                // Make space for new character
+                memmove(&input_buffer[cursor_pos + 1], 
+                       &input_buffer[cursor_pos], 
+                       buffer_length - cursor_pos);
+                
+                input_buffer[cursor_pos] = c;
+                cursor_pos++;
+                buffer_length++;
+                
+                refresh_line();
+            }
+        }
+    }
+    
+    disable_raw_mode();
+    
+    // Null-terminate and create result
+    input_buffer[buffer_length] = '\0';
+    srl_line_read = strdup(input_buffer);
+    
+    // Add to history if non-empty
+    if (buffer_length > 0) {
+        add_to_history(srl_line_read);
+    }
+    
+    return srl_line_read;
 }
 
 
-static char*
+char*
 srl_escape_spaces(const char* str)
 {
   if (!str) {
@@ -91,64 +576,17 @@ srl_escape_spaces(const char* str)
   return ptr;
 }
 
-
-static char *
-srl_dequote_func(char * text, int state)
-{
-  (void)state;
-  char* ptr = strdup(text);
-  char* ret = ptr;
-
-  for (int i = 0; *text; i++) {
-    (void)i;
-    if (*text != '\\') {
-      *ptr++ = *text;
-    }
-    text++;
-  }
-  *ptr = 0;
-
-  return ret;
-}
-
-
-static int
-srl_char_is_quoted(char* text, int index)
-{
-  int isquoted = 0;
-
-  if (index > 0) {
-    isquoted = text[index-1] == '\\' || text[index] == '\\';
-  }
-
-  return isquoted;
-}
-
-
-static char *
-srl_quote_func(char * text, int state, char* blah)
-{
-  (void)state,(void)blah;
-  return srl_escape_spaces(text);
-}
-
-
-static int
-srl_directory_rewrite(char** name)
-{
-  char* backup = *name;
-  *name = srl_dequote_func(*name, 0);
-  if (backup) {
-    free(backup);
-  }
-  return 1;
-}
-
-
 void
 srl_write_history(void)
 {
-  write_history(util_getHistoryFile());
+  // Custom history writing - save our internal history to file
+  FILE* file = fopen(util_getHistoryFile(), "w");
+  if (file) {
+    for (int i = 0; i < history_count; i++) {
+      fprintf(file, "%s\n", history[i]);
+    }
+    fclose(file);
+  }
 }
 
 
@@ -159,46 +597,58 @@ srl_cleanup(void)
     free(srl_line_read);
     srl_line_read = 0;
   }
+  
+  // Cleanup custom input wrapper
+  disable_raw_mode();
+  
+  // Free history
+  for (int i = 0; i < history_count; i++) {
+    free(history[i]);
+  }
+  history_count = 0;
 }
 
 
-static char **
-srl_completion_function(const char *text, int start, int end)
-{
-  (void)start,(void)end;
-
-  if (_srl_complete_hook) {
-    _srl_complete_hook(text);
+// Custom history loading
+static void load_history(void) {
+  FILE* file = fopen(util_getHistoryFile(), "r");
+  if (!file) return;
+  
+  char line[MAX_INPUT_LENGTH];
+  while (fgets(line, sizeof(line), file) && history_count < MAX_HISTORY_ENTRIES) {
+    // Remove trailing newline
+    size_t len = strlen(line);
+    if (len > 0 && line[len-1] == '\n') {
+      line[len-1] = '\0';
+    }
+    
+    if (strlen(line) > 0) {
+      history[history_count++] = strdup(line);
+    }
   }
-
-  return rl_completion_matches(text, srl_generator);
+  
+  fclose(file);
 }
 
 
 void
-srl_init(const char*(*prompt)(void),void (*complete_hook)(const char* text), char* (*generator)(int* list_index, const char* text, int len))
+srl_init(const char*(*prompt)(void),void (*complete_hook)(const char* text, const char* full_command_line), char* (*generator)(int* list_index, const char* text, int len))
 {
-  using_history();
-  read_history(util_getHistoryFile());
-
+  // Initialize custom input wrapper
   _srl_prompt = prompt;
   _srl_generator = generator;
   _srl_complete_hook = complete_hook;
-
-  rl_attempted_completion_function = srl_completion_function;
-
-#ifdef _WIN32
-    if (1) {
-      rl_completer_quote_characters = "\"";
-      rl_filename_quote_characters  = " `'=[]{}()<>|&\\\t" ;
-    } else
-#endif
-    {
-      rl_completer_quote_characters = "\\";
-      rl_filename_quote_characters  = " `'=[]{}()<>|&\\\t" ;
-      rl_filename_dequoting_function = srl_dequote_func;
-      rl_filename_quoting_function = srl_quote_func;
-      rl_char_is_quoted_p = srl_char_is_quoted;
-      rl_directory_rewrite_hook = srl_directory_rewrite;
-    }
+  
+  // Initialize state
+  terminal_setup = 0;
+  history_count = 0;
+  history_index = -1;
+  cursor_pos = 0;
+  buffer_length = 0;
+  
+  // Load history from file
+  load_history();
+  
+  // Custom input wrapper is ready!
+  // No more readline dependencies or limitations!
 }

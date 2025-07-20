@@ -17,23 +17,23 @@ ifneq (,$(findstring MINGW64,$(UNAME_S)))
 PLATFORM=mingw64
 endif
 
-MINGW_LIBS=-lws2_32 -liconv -lreadline
+MINGW_LIBS=-lws2_32 -liconv
 
 ifeq ($(PLATFORM),osx)
 # OSX
-CC=gcc -I/opt/homebrew/opt/readline/include/ -I/opt/homebrew/opt/libiconv/include
+CC=gcc -I/opt/homebrew/opt/libiconv/include
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined
 ifeq ($(RELEASE),true)
-LIBS=-L/opt/homebrew/opt/readline/lib/ -L/opt/homebrew/opt/libiconv/lib -liconv -lcharset -ltermcap -lreadline
+LIBS=-L/opt/homebrew/opt/libiconv/lib -liconv -lcharset -ltermcap
 else
-LIBS=-liconv -ltermcap -lreadline
+LIBS=-liconv -ltermcap
 endif
 MINGW_GCC_PREFIX=/usr/local/mingw
 MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
 else ifeq ($(PLATFORM),raspberry_pi)
 # Raspberry Pi
 CC=gcc
-LIBS=-lreadline
+LIBS=
 else ifeq ($(PLATFORM),linux)
 # Linux
 ifeq ($(RELEASE),true)
@@ -41,7 +41,7 @@ else
 CC=gcc-10
 endif
 STATIC_ANALYZE=-fanalyzer -fsanitize=address -fsanitize=undefined
-LIBS=-lreadline
+LIBS=
 MINGW_GCC_PREFIX=/usr/x86_64-w64-mingw32
 MINGW_GCC=x86_64-w64-mingw32-gcc
 else ifeq ($(PLATFORM),mingw64)
