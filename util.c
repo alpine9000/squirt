@@ -594,7 +594,13 @@ util_system(char** argv)
     if (i > 0) {
       commandLength++;
     }
-    commandLength += (strlen(argv[i])+2);
+    // Account for potential quotes around arguments with spaces
+    int argLen = strlen(argv[i]);
+    if (strchr(argv[i], ' ') != NULL) {
+      commandLength += argLen + 4; // +2 for quotes, +2 for safety
+    } else {
+      commandLength += argLen + 2; // +2 for safety
+    }
   }
   commandLength++;
 
@@ -604,7 +610,25 @@ util_system(char** argv)
     if (i > 0) {
       strcat(command, " ");
     }
-    strcat(command, argv[i]);
+    
+    // Quote arguments that contain spaces, but avoid double-quoting
+    if (strchr(argv[i], ' ') != NULL) {
+      int argLen = strlen(argv[i]);
+      // Check if argument is already quoted
+      if (argLen >= 2 && 
+          ((argv[i][0] == '"' && argv[i][argLen-1] == '"') ||
+           (argv[i][0] == '\'' && argv[i][argLen-1] == '\''))) {
+        // Already quoted, use as-is
+        strcat(command, argv[i]);
+      } else {
+        // Not quoted, add quotes
+        strcat(command, "\"");
+        strcat(command, argv[i]);
+        strcat(command, "\"");
+      }
+    } else {
+      strcat(command, argv[i]);
+    }
   }
 
   int error = system(command);
