@@ -1095,6 +1095,7 @@ cli_getAmigaAssignSuggestion(int* list_index, const char* match_text, int match_
       total_assign_matches++;
     }
   }
+  (void)total_assign_matches;
   
   // Simple assign completion - the caller manages the list_index properly
   // We just need to return the assign at the current relative position
