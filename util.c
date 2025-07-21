@@ -13,12 +13,16 @@
 #include <limits.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #ifndef _WIN32
 #include <ftw.h>
 #include <pwd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#else
+// Windows/MinGW compatibility
+typedef int socklen_t;
 #endif
 
 #include "main.h"
@@ -84,6 +88,14 @@ void
 util_connect(const char* hostname)
 {
   struct sockaddr_in sockAddr;
+  int result;
+  fd_set writefds;
+  struct timeval timeout;
+  socklen_t len;
+  int error;
+#ifndef _WIN32
+  int flags;
+#endif
 
   int port=NETWORK_PORT;
 
@@ -103,12 +115,89 @@ util_connect(const char* hostname)
     goto error;
   }
 
-  if (connect(main_socketFd, (struct sockaddr *)&sockAddr, sizeof (struct sockaddr_in)) < 0) {
+  // Set socket to non-blocking mode
+#ifdef _WIN32
+  u_long mode = 1;
+  if (ioctlsocket(main_socketFd, FIONBIO, &mode) != 0) {
     goto error;
   }
+#else
+  flags = fcntl(main_socketFd, F_GETFL, 0);
+  if (flags < 0) {
+    goto error;
+  }
+  if (fcntl(main_socketFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+    goto error;
+  }
+#endif
+
+  // Attempt to connect
+  result = connect(main_socketFd, (struct sockaddr *)&sockAddr, sizeof(struct sockaddr_in));
+  
+  if (result < 0) {
+#ifdef _WIN32
+    int wsaError = WSAGetLastError();
+    if (wsaError != WSAEWOULDBLOCK) {
+      goto error;
+    }
+#else
+    if (errno != EINPROGRESS) {
+      goto error;
+    }
+#endif
+    
+    // Connection is in progress, wait for it to complete with timeout
+    FD_ZERO(&writefds);
+    FD_SET(main_socketFd, &writefds);
+    
+    timeout.tv_sec = 5;  // 5 second timeout
+    timeout.tv_usec = 0;
+    
+    result = select(main_socketFd + 1, NULL, &writefds, NULL, &timeout);
+    
+    if (result <= 0) {
+      // Timeout or error
+      goto error;
+    }
+    
+    // Check if connection was successful
+    len = sizeof(error);
+#ifdef _WIN32
+    if (getsockopt(main_socketFd, SOL_SOCKET, SO_ERROR, (char*)&error, &len) < 0) {
+#else
+    if (getsockopt(main_socketFd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+#endif
+      goto error;
+    }
+    
+    if (error != 0) {
+#ifdef _WIN32
+      WSASetLastError(error);
+#else
+      errno = error;
+#endif
+      goto error;
+    }
+  }
+
+  // Restore socket to blocking mode
+#ifdef _WIN32
+  mode = 0;
+  if (ioctlsocket(main_socketFd, FIONBIO, &mode) != 0) {
+    goto error;
+  }
+#else
+  if (fcntl(main_socketFd, F_SETFL, flags) < 0) {
+    goto error;
+  }
+#endif
 
   return;
  error:
+  if (main_socketFd >= 0) {
+    close(main_socketFd);
+    main_socketFd = -1;
+  }
   fatalError("failed to connect to server %s:%d", hostname,port);
 }
 
@@ -126,17 +215,36 @@ util_mkpath(const char *dir)
 
   len = strlen(tmp);
 
+#ifdef _WIN32
+  // On Windows, check for backslash at end
+  if (tmp[len - 1] == '\\') {
+    makeLast = 1;
+    tmp[len - 1] = 0;
+  }
+#else
+  // On Unix, check for forward slash at end
   if (tmp[len - 1] == '/') {
     makeLast = 1;
     tmp[len - 1] = 0;
   }
+#endif
 
   for (p = tmp + 1; *p; p++) {
+#ifdef _WIN32
+    // On Windows, look for backslashes
+    if (*p == '\\') {
+      *p = 0;
+      util_mkdir(tmp, S_IRWXU);
+      *p = '\\';
+    }
+#else
+    // On Unix, look for forward slashes
     if (*p == '/') {
       *p = 0;
       util_mkdir(tmp, S_IRWXU);
       *p = '/';
     }
+#endif
   }
 
   if (makeLast) {
@@ -534,7 +642,7 @@ util_getTempFolder(void)
 #else
   char buffer[PATH_MAX];
   GetTempPathA(PATH_MAX, buffer);
-  snprintf(path, sizeof(path), "%s.squirt/%d/", buffer, getpid());
+  snprintf(path, sizeof(path), "%s.squirt\\%d\\", buffer, getpid());
   return path;
 #endif
 }
@@ -631,7 +739,21 @@ util_system(char** argv)
     }
   }
 
+#ifdef _WIN32
+  // On Windows, normalize paths by converting forward slashes to backslashes
+  char* normalized_command = malloc(strlen(command) + 1);
+  strcpy(normalized_command, command);
+  for (char* p = normalized_command; *p; p++) {
+    if (*p == '/') {
+      *p = '\\';
+    }
+  }
+  
+  int error = system(normalized_command);
+  free(normalized_command);
+#else
   int error = system(command);
+#endif
   free(command);
   return error;
 }

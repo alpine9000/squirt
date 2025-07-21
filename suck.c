@@ -53,7 +53,8 @@ squirt_suckFile(const char* filename, const char* progressHeader,  void (*progre
   if (fileLength == -1) {
     uint32_t status;
     util_recvU32(main_socketFd, &status);
-    printf("remote file not found %d\n", status);
+    printf("Error: Remote file '%s' not found\n", filename);
+    suck_cleanup();
     return -1;
   }
 

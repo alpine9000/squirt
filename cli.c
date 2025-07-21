@@ -221,6 +221,9 @@ cli_freeHostFile(cli_hostfile_t* file)
       unlink(file->backupFilename);
       free(file->backupFilename);
     }
+    if (file->remoteFilename) {
+      free(file->remoteFilename);
+    }
     free(file);
   }
 }
@@ -230,12 +233,31 @@ static cli_hostfile_t*
 cli_convertFileToHost(cli_hostfile_t** list, const char* remote)
 {
   cli_hostfile_t *file = calloc(1, sizeof(cli_hostfile_t));
-  char* local = strdup(remote);
+  
+  // Strip quotes from remote filename if present
+  char* unquotedRemote = NULL;
+  int remoteLen = strlen(remote);
+  if ((remote[0] == '"' && remote[remoteLen-1] == '"' && remoteLen > 1) ||
+      (remote[0] == '\'' && remote[remoteLen-1] == '\'' && remoteLen > 1)) {
+    // Remove quotes
+    unquotedRemote = malloc(remoteLen - 1);
+    strncpy(unquotedRemote, remote + 1, remoteLen - 2);
+    unquotedRemote[remoteLen - 2] = '\0';
+    file->remoteFilename = unquotedRemote;
+  } else {
+    file->remoteFilename = strdup(remote);
+  }
+  
+  char* local = strdup(file->remoteFilename);
   cli_replaceChar(local, ':', '/');
 
+#ifdef _WIN32
+  // On Windows, convert forward slashes to backslashes for proper path handling
+  cli_replaceChar(local, '/', '\\');
+#endif
+
   const char *tempPath = util_getTempFolder();
-  int localFilenameLength = strlen(remote) + strlen(tempPath) + 1;
-  file->remoteFilename = (char*)remote;
+  int localFilenameLength = strlen(file->remoteFilename) + strlen(tempPath) + 1;
   file->localFilename = malloc(localFilenameLength);
   snprintf(file->localFilename, localFilenameLength, "%s%s", tempPath, local);
   free(local);
@@ -294,6 +316,13 @@ cli_hostCommand(int argc, char** argv)
 {
   int success = 0;
   (void)argc,(void)argv;
+
+  // Preserve original arguments BEFORE any processing
+  char** originalArgv = malloc(sizeof(char*)*(argc+1));
+  for (int i = 0; i < argc; i++) {
+    originalArgv[i] = argv[i];
+  }
+  originalArgv[argc] = 0;
 
   cli_hostfile_t* list = 0;
 
@@ -356,20 +385,21 @@ cli_hostCommand(int argc, char** argv)
   }
   newArgv[argc] = 0;
 
-  // Check for hybrid operations (local-to-remote, remote-to-remote)
+  // Check for hybrid operations (local-to-remote, remote-to-remote) using ORIGINAL arguments
   int sourceIsLocal = 0, sourceIsRemote = 0, destIsRemote = 0;
   char* sourcePath = NULL;
   char* destPath = NULL;
   if (isCopyCommand && argc == 3) {
-    sourceIsLocal = cli_isLocalFileArgumentForExecution(argv[1]);
-    sourceIsRemote = !sourceIsLocal && argv[1][0] != '-';
-    destIsRemote = !cli_isLocalFileArgumentForExecution(argv[2]) && argv[2][0] != '-';
+    sourceIsLocal = cli_isLocalFileArgumentForExecution(originalArgv[1]);
+    sourceIsRemote = !sourceIsLocal && originalArgv[1][0] != '-';
+    destIsRemote = !cli_isLocalFileArgumentForExecution(originalArgv[2]) && originalArgv[2][0] != '-';
+
     
-    if ((sourceIsLocal && destIsRemote) || (sourceIsRemote && destIsRemote)) {
+    if ((sourceIsLocal && destIsRemote) || (sourceIsRemote && destIsRemote) || (sourceIsRemote && !destIsRemote)) {
       
       // Get the source file path (either expanded local or downloaded temp file)
       sourcePath = newArgv[1];
-      destPath = argv[2];
+      destPath = originalArgv[2];
       
       // Strip quotes from remote path if present
       char unquotedRemotePath[PATH_MAX];
@@ -385,16 +415,24 @@ cli_hostCommand(int argc, char** argv)
       // Extract filename for destination path construction
       char* filename;
       if (sourceIsLocal) {
-        // For local files, extract filename from the source path
-        filename = strrchr(sourcePath, '/');
+        // For local files, extract filename from the original argument (not expanded path)
+        char* originalLocalPath = originalArgv[1];
+        // Skip the '!' prefix if present
+        if (originalLocalPath[0] == '!') {
+          originalLocalPath++;
+        }
+        // Handle both Unix-style (/) and Windows-style (\) path separators
+        char* lastSlash = strrchr(originalLocalPath, '/');
+        char* lastBackslash = strrchr(originalLocalPath, '\\');
+        filename = (lastSlash > lastBackslash) ? lastSlash : lastBackslash;
         if (filename) {
-          filename++; // Skip the '/'
+          filename++; // Skip the path separator
         } else {
-          filename = sourcePath; // No path separator, use whole string
+          filename = originalLocalPath; // No path separator, use whole string
         }
       } else {
-        // For remote files, extract filename from original remote path (argv[1])
-        char* originalRemotePath = argv[1];
+        // For remote files, extract filename from original remote path (originalArgv[1])
+        char* originalRemotePath = originalArgv[1];
         filename = strrchr(originalRemotePath, ':');
         if (filename) {
           filename++; // Skip the ':'
@@ -405,8 +443,9 @@ cli_hostCommand(int argc, char** argv)
       
       // Construct full destination path
       char fullDestPath[PATH_MAX];
-      if (unquotedRemotePath[strlen(unquotedRemotePath)-1] == ':') {
-        // Directory destination (ends with :), append filename
+      size_t destLen = strlen(unquotedRemotePath);
+      if (destLen > 0 && (unquotedRemotePath[destLen-1] == ':' || unquotedRemotePath[destLen-1] == '/')) {
+        // Directory destination (ends with : or /), append filename
         snprintf(fullDestPath, sizeof(fullDestPath), "%s%s", unquotedRemotePath, filename);
       } else {
         // File destination, use as-is
@@ -414,11 +453,121 @@ cli_hostCommand(int argc, char** argv)
         fullDestPath[sizeof(fullDestPath)-1] = '\0';
       }
       
+      // For local-to-remote operations, read original protection bits BEFORE transfer
+      uint32_t originalProtectionBits = 0;
+      int hasOriginalProtectionBits = 0;
+      if (sourceIsLocal && destIsRemote) {
+        char dirPath[PATH_MAX];
+        char* fileName;
+        
+
+        
+        // Extract directory and filename from destination path
+        char* lastColon = strrchr(fullDestPath, ':');
+        if (lastColon) {
+          // Amiga-style path (e.g., "Work:readme.txt")
+          size_t dirLen = lastColon - fullDestPath + 1; // Include the colon
+          strncpy(dirPath, fullDestPath, dirLen);
+          dirPath[dirLen] = '\0';
+          fileName = lastColon + 1;
+        } else {
+          // No colon found, assume current directory
+          strcpy(dirPath, "");
+          fileName = fullDestPath;
+        }
+        
+        dir_entry_list_t* dirInfo = dir_read(dirPath);
+        
+        if (dirInfo) {
+          // Search for the specific file in the directory listing
+          dir_entry_t* entry = dirInfo->head;
+          
+          while (entry) {
+            if (strcmp(entry->name, fileName) == 0) {
+              originalProtectionBits = entry->prot;
+              hasOriginalProtectionBits = 1;
+              break;
+            }
+            entry = entry->next;
+          }
+          
+          dir_freeEntryList(dirInfo);
+        }
+      }
+      
       // Use squirt to transfer the file
-      success = squirt_file(sourcePath, 0, fullDestPath, 1, 0) == 0;
+      if (sourceIsRemote && !destIsRemote) {
+        // Remote-to-local: download using squirt_suckFile
+        // Strip quotes from source path if present
+        char unquotedSourcePath[PATH_MAX];
+        char* remoteSourcePath = originalArgv[1];
+        int sourcePathLen = strlen(remoteSourcePath);
+        if ((remoteSourcePath[0] == '"' && remoteSourcePath[sourcePathLen-1] == '"' && sourcePathLen > 1) ||
+            (remoteSourcePath[0] == '\'' && remoteSourcePath[sourcePathLen-1] == '\'' && sourcePathLen > 1)) {
+          // Remove quotes
+          strncpy(unquotedSourcePath, remoteSourcePath + 1, sourcePathLen - 2);
+          unquotedSourcePath[sourcePathLen - 2] = '\0';
+          remoteSourcePath = unquotedSourcePath;
+        }
+        
+        char* localDestPath = cli_expandLocalPath(originalArgv[2]);
+        
+        // Check for empty destination path
+        if (!localDestPath || strlen(localDestPath) == 0) {
+          printf("Error: No destination path specified\n");
+          if (localDestPath && localDestPath != originalArgv[2]) {
+            free(localDestPath);
+          }
+          return 0;
+        }
+        
+        // Check for root directory write attempt
+        if (strcmp(localDestPath, "/") == 0) {
+          printf("Error: Write denied on root directory\n");
+          if (localDestPath != originalArgv[2]) {
+            free(localDestPath);
+          }
+          return 0;
+        }
+        
+        // Check if destination is a directory and append filename if needed
+        char finalDestPath[PATH_MAX];
+        int localDestLen = strlen(localDestPath);
+        if (localDestLen > 0 && (localDestPath[localDestLen-1] == '/' || localDestPath[localDestLen-1] == '\\')) {
+          // Directory destination - extract filename from remote source and append
+          // Look for the last directory separator first, then volume separator
+          char* sourceFilename = strrchr(remoteSourcePath, '/');
+          if (sourceFilename) {
+            sourceFilename++; // Skip the '/'
+          } else {
+            sourceFilename = strrchr(remoteSourcePath, ':');
+            if (sourceFilename) {
+              sourceFilename++; // Skip the ':'
+            } else {
+              sourceFilename = remoteSourcePath; // No path separator, use whole string
+            }
+          }
+          snprintf(finalDestPath, sizeof(finalDestPath), "%s%s", localDestPath, sourceFilename);
+        } else {
+          // File destination, use as-is
+          strncpy(finalDestPath, localDestPath, sizeof(finalDestPath)-1);
+          finalDestPath[sizeof(finalDestPath)-1] = '\0';
+        }
+        
+        uint32_t protection;
+        success = squirt_suckFile(remoteSourcePath, 0, 0, finalDestPath, &protection) >= 0;
+        if (localDestPath != originalArgv[2]) {
+          free(localDestPath);
+        }
+      } else {
+        // Local-to-remote or remote-to-remote: upload using squirt_file
+
+        success = squirt_file(sourcePath, 0, fullDestPath, 1, 0) == 0;
+      }
       
       if (success) {
         // For remote-to-remote operations, preserve protection bits from source
+        // For local-to-remote operations, preserve protection bits from existing destination
         if (sourceIsRemote && destIsRemote) {
           
           // Query source file protection bits by listing its directory
@@ -452,13 +601,22 @@ cli_hostCommand(int argc, char** argv)
                 uint32_t sourceProtection = entry->prot;
                 
                 // Apply protection bits to destination file
-                protect_file(fullDestPath, sourceProtection, 0);
+                if (protect_file(fullDestPath, sourceProtection, 0) != 0) {
+                  // Protection bits setting failed, but don't crash - just continue
+                  // The file transfer was successful, which is the primary goal
+                }
                 found = 1;
               }
               entry = entry->next;
             }
             
             dir_freeEntryList(dirInfo);
+          }
+        } else if (sourceIsLocal && destIsRemote && hasOriginalProtectionBits) {
+          // For local-to-remote operations, apply the original protection bits that were read before transfer
+          if (protect_file(fullDestPath, originalProtectionBits, 0) != 0) {
+            // Protection bits setting failed, but don't crash - just continue
+            // The file transfer was successful, which is the primary goal
           }
         }
       }
@@ -467,6 +625,10 @@ cli_hostCommand(int argc, char** argv)
       if (originalSourcePath) {
         free(originalSourcePath);
       }
+      
+      // Return early to prevent double execution through normal command path
+      free(newArgv);
+      return success;
     } else {
       success = util_system(newArgv);
     }
@@ -480,6 +642,7 @@ cli_hostCommand(int argc, char** argv)
     free(expandedPaths[i]);
   }
   free(expandedPaths);
+  free(originalArgv);
 
  error:
   {
@@ -1046,7 +1209,12 @@ cli_getLocalFileSuggestion(int* list_index, const char* text, int len)
     char* last_slash = strrchr(expanded_text, '/');
     if (last_slash) {
       *last_slash = '\0';
-      dir_path = strdup(expanded_text);
+      // Handle root directory case: if path becomes empty, use "/"
+      if (strlen(expanded_text) == 0) {
+        dir_path = strdup("/");
+      } else {
+        dir_path = strdup(expanded_text);
+      }
     } else {
       dir_path = strdup(".");
     }
@@ -1121,13 +1289,22 @@ cli_getLocalFileSuggestion(int* list_index, const char* text, int len)
               snprintf(result, PATH_MAX, "~/%s", entry->d_name);
             }
           } else {
-            snprintf(result, PATH_MAX, "%s%s/%s", prefix, dir_path, entry->d_name);
+            // Handle root directory to avoid double slashes
+            if (strcmp(dir_path, "/") == 0) {
+              snprintf(result, PATH_MAX, "%s/%s", prefix, entry->d_name);
+            } else {
+              snprintf(result, PATH_MAX, "%s%s/%s", prefix, dir_path, entry->d_name);
+            }
           }
         }
         
         // Check if it's a directory and add trailing slash
         char full_path[PATH_MAX];
-        snprintf(full_path, PATH_MAX, "%s/%s", dir_path, entry->d_name);
+        if (strcmp(dir_path, "/") == 0) {
+          snprintf(full_path, PATH_MAX, "/%s", entry->d_name);
+        } else {
+          snprintf(full_path, PATH_MAX, "%s/%s", dir_path, entry->d_name);
+        }
         struct stat st;
         int is_directory = (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode));
         
