@@ -11,11 +11,11 @@ build/mingw/%.dll: support/%.dll
 
 build/mingw/squirt.exe: $(SQUIRT_MINGW_OBJS)
 	@mkdir -p build/mingw
-	$(MINGW_GCC) $(MINGW_GCC_CFLAGS) $(SQUIRT_MINGW_OBJS) -o build/mingw/squirt $(MINGW_LIBS)
+	$(MINGW_GCC) $(MINGW_GCC_CFLAGS) $(SQUIRT_MINGW_OBJS) -o build/mingw/squirt $(MINGW_LIB_PATH) $(MINGW_LIBS)
 
 build/mingw/squirt_%: $(SQUIRT_MINGW_OBJS)
 	@mkdir -p build/mingw
-	$(MINGW_GCC) $(MINGW_GCC_CFLAGS) $(SQUIRT_MINGW_OBJS) -o build/mingw/squirt_$* $(MINGW_LIBS)
+	$(MINGW_GCC) $(MINGW_GCC_CFLAGS) $(SQUIRT_MINGW_OBJS) -o build/mingw/squirt_$* $(MINGW_LIB_PATH) $(MINGW_LIBS)
 
 build/obj/mingw/%.o: %.c $(HEADERS) common.h Makefile
 	@mkdir -p build/obj/mingw
