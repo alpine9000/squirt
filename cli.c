@@ -401,15 +401,46 @@ cli_hostCommand(int argc, char** argv)
       sourcePath = newArgv[1];
       destPath = originalArgv[2];
       
-      // Strip quotes from remote path if present
+      // Strip quotes from remote path if present (only for properly formed quoted strings)
       char unquotedRemotePath[PATH_MAX];
       int remotePathLen = strlen(destPath);
-      if ((destPath[0] == '"' && destPath[remotePathLen-1] == '"' && remotePathLen > 1) ||
-          (destPath[0] == '\'' && destPath[remotePathLen-1] == '\'' && remotePathLen > 1)) {
-        // Remove quotes
+      int hasValidQuotes = 0;
+      
+      // Check for properly formed quoted strings
+      if (remotePathLen >= 2) {
+        char quoteChar = destPath[0];
+        if ((quoteChar == '"' || quoteChar == '\'') && destPath[remotePathLen-1] == quoteChar) {
+          // Check that the middle content doesn't contain the same quote character
+          hasValidQuotes = 1;
+          for (int i = 1; i < remotePathLen - 1; i++) {
+            if (destPath[i] == quoteChar) {
+              hasValidQuotes = 0; // Found quote character in the middle - invalid
+              break;
+            }
+          }
+        }
+      }
+      
+      if (hasValidQuotes) {
+        // Remove quotes from properly formed quoted string
         strncpy(unquotedRemotePath, destPath + 1, remotePathLen - 2);
         unquotedRemotePath[remotePathLen - 2] = '\0';
       } else {
+        // Check for obviously malformed quote patterns that should be blocked
+        int hasOnlyQuotes = 1;
+        for (int i = 0; i < remotePathLen; i++) {
+          if (destPath[i] != '"' && destPath[i] != '\'') {
+            hasOnlyQuotes = 0;
+            break;
+          }
+        }
+        
+        if (hasOnlyQuotes && remotePathLen > 0) {
+          printf("Error: Invalid destination '%s' - contains only quote characters\n", destPath);
+          printf("Hint: Use properly quoted strings like \"filename\" or unquoted filenames\n");
+          goto cleanup;
+        }
+        
         strcpy(unquotedRemotePath, destPath);
       }
       // Extract filename for destination path construction
@@ -441,10 +472,31 @@ cli_hostCommand(int argc, char** argv)
         }
       }
       
+      // Validate Amiga destination path
+      if (destIsRemote) {
+        // Check for invalid Unix-style paths as Amiga destinations
+        // Note: "/" is valid in AmigaOS (parent directory), so we don't block it
+        if (strcmp(unquotedRemotePath, "./") == 0 || 
+            strcmp(unquotedRemotePath, ".") == 0 || strcmp(unquotedRemotePath, "../") == 0) {
+          printf("Error: '%s' is not a valid Amiga destination\n", unquotedRemotePath);
+          printf("Hint: Use Amiga-style paths like:\n");
+          printf("  - Current directory: Use just the filename (e.g., 'cli.c') or double quotes (\"\")\n");
+          printf("  - Parent directory: Use '/'\n");
+          printf("  - Specific volume: Use 'Work:cli.c' or 'RAM:cli.c'\n");
+          printf("  - Directory: Use 'Work:MyDir/cli.c'\n");
+          goto cleanup;
+        }
+      }
+      
       // Construct full destination path
       char fullDestPath[PATH_MAX];
       size_t destLen = strlen(unquotedRemotePath);
-      if (destLen > 0 && (unquotedRemotePath[destLen-1] == ':' || unquotedRemotePath[destLen-1] == '/')) {
+      if (destLen == 0) {
+        // Empty string destination ("" in AmigaOS means current directory)
+        // Just use the filename in current directory
+        strncpy(fullDestPath, filename, sizeof(fullDestPath)-1);
+        fullDestPath[sizeof(fullDestPath)-1] = '\0';
+      } else if (destLen > 0 && (unquotedRemotePath[destLen-1] == ':' || unquotedRemotePath[destLen-1] == '/')) {
         // Directory destination (ends with : or /), append filename
         snprintf(fullDestPath, sizeof(fullDestPath), "%s%s", unquotedRemotePath, filename);
       } else {
@@ -643,6 +695,13 @@ cli_hostCommand(int argc, char** argv)
   }
   free(expandedPaths);
   free(originalArgv);
+
+ cleanup:
+  // Clean up original source path if allocated
+  if (originalSourcePath) {
+    free(originalSourcePath);
+  }
+  return 0;
 
  error:
   {
