@@ -452,11 +452,81 @@ srl_gets(void)
     
     // Main input loop
     while (1) {
-        char c;
+        int c;
 #ifdef _WIN32
         c = _getch(); // Windows console input
+        
+        // Windows _getch() returns special codes for arrow keys
+        if (c == 0 || c == 224) { // Extended key prefix
+            c = _getch(); // Get the actual key code
+            switch (c) {
+                case 72: // Up arrow
+                    reset_tab_tracking();
+                    if (history_count > 0) {
+                        if (history_index == -1) history_index = history_count - 1;
+                        else if (history_index > 0) history_index--;
+                        
+                        if (history_index >= 0) {
+                            strcpy(input_buffer, history[history_index]);
+                            buffer_length = strlen(input_buffer);
+                            cursor_pos = buffer_length;
+                            refresh_line();
+                        }
+                    }
+                    continue;
+                    
+                case 80: // Down arrow
+                    reset_tab_tracking();
+                    if (history_index >= 0) {
+                        history_index++;
+                        if (history_index >= history_count) {
+                            history_index = -1;
+                            input_buffer[0] = '\0';
+                            buffer_length = 0;
+                            cursor_pos = 0;
+                        } else {
+                            strcpy(input_buffer, history[history_index]);
+                            buffer_length = strlen(input_buffer);
+                            cursor_pos = buffer_length;
+                        }
+                        refresh_line();
+                    }
+                    continue;
+                    
+                case 77: // Right arrow
+                    reset_tab_tracking();
+                    if (cursor_pos < buffer_length) {
+                        cursor_pos++;
+                        printf("\033[C");
+                        fflush(stdout);
+                    }
+                    continue;
+                    
+                case 75: // Left arrow
+                    reset_tab_tracking();
+                    if (cursor_pos > 0) {
+                        cursor_pos--;
+                        printf("\033[D");
+                        fflush(stdout);
+                    }
+                    continue;
+                    
+                default:
+                    continue; // Ignore other extended keys
+            }
+        }
 #else
-        if (read(STDIN_FILENO, &c, 1) != 1) continue;
+        // Linux/Unix: read one character at a time
+        unsigned char ch;
+        ssize_t result = read(STDIN_FILENO, &ch, 1);
+        if (result != 1) {
+            if (result == 0) {
+                // EOF - exit gracefully
+                break;
+            }
+            continue;
+        }
+        c = (int)ch; // Ensure proper character conversion
 #endif
         
         if (c == '\r' || c == '\n') {
@@ -485,12 +555,70 @@ srl_gets(void)
             char seq[3];
 #ifdef _WIN32
             seq[0] = _getch();
-            seq[1] = _getch();
+            // Windows console sends different escape sequences
+            // Handle both Windows format (ESC + single char) and ANSI format
+            if (seq[0] == 'H') {
+                // Windows: Up arrow = ESC H
+                reset_tab_tracking();
+                if (history_count > 0) {
+                    if (history_index == -1) history_index = history_count - 1;
+                    else if (history_index > 0) history_index--;
+                    
+                    if (history_index >= 0) {
+                        strcpy(input_buffer, history[history_index]);
+                        buffer_length = strlen(input_buffer);
+                        cursor_pos = buffer_length;
+                        refresh_line();
+                    }
+                }
+                continue;
+            } else if (seq[0] == 'P') {
+                // Windows: Down arrow = ESC P
+                reset_tab_tracking();
+                if (history_index >= 0) {
+                    history_index++;
+                    if (history_index >= history_count) {
+                        history_index = -1;
+                        input_buffer[0] = '\0';
+                        buffer_length = 0;
+                        cursor_pos = 0;
+                    } else {
+                        strcpy(input_buffer, history[history_index]);
+                        buffer_length = strlen(input_buffer);
+                        cursor_pos = buffer_length;
+                    }
+                    refresh_line();
+                }
+                continue;
+            } else if (seq[0] == 'M') {
+                // Windows: Right arrow = ESC M
+                reset_tab_tracking();
+                if (cursor_pos < buffer_length) {
+                    cursor_pos++;
+                    printf("\033[C");
+                    fflush(stdout);
+                }
+                continue;
+            } else if (seq[0] == 'K') {
+                // Windows: Left arrow = ESC K
+                reset_tab_tracking();
+                if (cursor_pos > 0) {
+                    cursor_pos--;
+                    printf("\033[D");
+                    fflush(stdout);
+                }
+                continue;
+            } else if (seq[0] == '[') {
+                // ANSI escape sequence (fallback)
+                seq[1] = _getch();
+            } else {
+                continue; // Unknown escape sequence
+            }
 #else
-            ssize_t n1 = read(STDIN_FILENO, &seq[0], 1);
-            if (n1 != 1) continue;
-            ssize_t n2 = read(STDIN_FILENO, &seq[1], 1);
-            if (n2 != 1) continue;
+            // Simple approach: read the next two characters for ANSI escape sequences
+            if (read(STDIN_FILENO, &seq[0], 1) != 1) continue;
+            if (seq[0] != '[') continue; // Only handle ANSI sequences [A, [B, etc.
+            if (read(STDIN_FILENO, &seq[1], 1) != 1) continue;
 #endif
             
             if (seq[0] == '[') {
