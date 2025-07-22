@@ -256,8 +256,13 @@ cli_convertFileToHost(cli_hostfile_t** list, const char* remote)
   cli_replaceChar(local, '/', '\\');
 #endif
 
+  // Apply Windows reserved name handling to the local filename
+  char* safeName = util_safeName(local);
+  free(local);
+  local = safeName;
+
   const char *tempPath = util_getTempFolder();
-  int localFilenameLength = strlen(file->remoteFilename) + strlen(tempPath) + 1;
+  int localFilenameLength = strlen(local) + strlen(tempPath) + 1;
   file->localFilename = malloc(localFilenameLength);
   snprintf(file->localFilename, localFilenameLength, "%s%s", tempPath, local);
   free(local);
@@ -301,11 +306,19 @@ cli_saveFileIfModified(cli_hostfile_t* file)
     return 1; // Consider this "successful" - the file was intentionally removed
   }
   
-  if (cli_compareFile(file->localFilename, file->backupFilename) == 0) {
+  if (!file->backupFilename) {
+    return 1;
+  }
+  
+  int comparison = cli_compareFile(file->localFilename, file->backupFilename);
+  
+  if (comparison == 0) {
     success = squirt_file(file->localFilename, 0, file->remoteFilename, 1, 0) == 0;
     if (success) {
       success = protect_file(file->remoteFilename, file->remoteProtection, 0);
     }
+  } else {
+    success = 1; // No upload needed, but this is "successful"
   }
 
   return success;
@@ -343,23 +356,24 @@ cli_hostCommand(int argc, char** argv)
     }
   }
   
-  for (int i = 1; i < argc; i++) {
-    int isLocal = cli_isLocalFileArgumentForExecution(argv[i]);
-    int isDestination = (i == destinationIndex);
-    
-    // Skip local files, destinations, command options, and shell operators
-    if (!isLocal && !isDestination &&
-        argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
-      // This is a remote source file - transfer it to local temp directory
-      cli_hostfile_t* hostFile = cli_convertFileToHost(&list, argv[i]);
-      if (hostFile) {
-	hostFile->argv = &argv[i];
-	argv[i] = hostFile->localFilename;
-      } else {
-	goto error;
+  // Skip pre-download for copy commands that will be handled by hybrid copy logic
+  if (!isCopyCommand) {
+    for (int i = 1; i < argc; i++) {
+      int isLocal = cli_isLocalFileArgumentForExecution(argv[i]);
+      int isDestination = (i == destinationIndex);
+      
+      // Skip local files, destinations, command options, and shell operators
+      if (!isLocal && !isDestination &&
+          argv[i][0] != '-' && argv[i][0] != '|' && argv[i][0] != '>') {
+        // This is a remote source file - transfer it to local temp directory
+        cli_hostfile_t* hostFile = cli_convertFileToHost(&list, argv[i]);
+        if (hostFile) {
+	  hostFile->argv = &argv[i];
+	  argv[i] = hostFile->localFilename;
+        } else {
+	  goto error;
+        }
       }
-    } else {
-      // Skip destinations, local files, options, and operators
     }
   }
 
@@ -599,7 +613,19 @@ cli_hostCommand(int argc, char** argv)
               sourceFilename = remoteSourcePath; // No path separator, use whole string
             }
           }
-          snprintf(finalDestPath, sizeof(finalDestPath), "%s%s", localDestPath, sourceFilename);
+          
+          // Apply Windows reserved name handling to the extracted filename
+          char* safeFilename = util_safeName(sourceFilename);
+          if (!safeFilename) {
+            printf("Error: Memory allocation failed for safe filename\n");
+            if (localDestPath != originalArgv[2]) {
+              free(localDestPath);
+            }
+            return 0;
+          }
+          
+          snprintf(finalDestPath, sizeof(finalDestPath), "%s%s", localDestPath, safeFilename);
+          free(safeFilename);
         } else {
           // File destination, use as-is
           strncpy(finalDestPath, localDestPath, sizeof(finalDestPath)-1);
@@ -689,6 +715,24 @@ cli_hostCommand(int argc, char** argv)
   }
   free(newArgv);
   
+  // Process transfer-back after successful command execution
+  cli_hostfile_t* file = list;
+  while (file) {
+    cli_saveFileIfModified(file);
+    cli_hostfile_t* save = file;
+    file = file->next;
+    
+    // Restore original argv value (find it in originalArgv)
+    for (int i = 1; i < argc; i++) {
+      if (save->argv == &argv[i]) {
+        *save->argv = originalArgv[i];
+        break;
+      }
+    }
+    
+    cli_freeHostFile(save);
+  }
+  
   // Clean up expanded paths
   for (int i = 0; i < expandedCount; i++) {
     free(expandedPaths[i]);
@@ -701,23 +745,13 @@ cli_hostCommand(int argc, char** argv)
   if (originalSourcePath) {
     free(originalSourcePath);
   }
-  return 0;
+  
+  util_rmdir(util_getTempFolder());
+  return success;
 
  error:
-  {
-    cli_hostfile_t* file = list;
-    while (file) {
-      cli_saveFileIfModified(file);
-      cli_hostfile_t* save = file;
-      file = file->next;
-      *save->argv = save->remoteFilename;
-      cli_freeHostFile(save);
-    }
-  }
-
-  util_rmdir(util_getTempFolder());
-
-  return success;
+  // Transfer-back is now handled in main flow above
+  goto cleanup;
 }
 
 

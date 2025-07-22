@@ -226,8 +226,7 @@ dir_getDirEntry(dir_entry_list_t* entryList)
   char* buffer = util_recvLatin1AsUtf8(main_socketFd, nameLength);
 
   if (!buffer) {
-    fprintf(stderr, "failed to read name\n");
-    return 0;
+    fatalError("failed to read name");
   }
 
   int32_t type;

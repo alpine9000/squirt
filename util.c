@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <ctype.h>
 #include <errno.h>
 
 #ifndef _WIN32
@@ -187,10 +188,17 @@ util_connect(const char* hostname)
     goto error;
   }
 #else
-  if (fcntl(main_socketFd, F_SETFL, flags) < 0) {
+  // Clear the O_NONBLOCK flag to ensure blocking mode
+  if (fcntl(main_socketFd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
     goto error;
   }
 #endif
+
+  // Note: Socket-level timeouts (SO_RCVTIMEO/SO_SNDTIMEO) can cause issues
+  // Connection timeout is already handled above with select() during connect
+
+  // Reset connection error flag for new connection
+  util_resetConnectionErrorFlag();
 
   return;
  error:
@@ -479,6 +487,14 @@ util_amigaBaseName(const char* filename)
   return filename;
 }
 
+// Static flag to prevent duplicate error messages
+static int connection_error_reported = 0;
+
+void
+util_resetConnectionErrorFlag(void)
+{
+  connection_error_reported = 0;
+}
 
 size_t
 util_recv(int socket, void *buffer, size_t length, int flags)
@@ -490,7 +506,23 @@ util_recv(int socket, void *buffer, size_t length, int flags)
     if (got > 0) {
       total += got;
       ptr += got;
+    } else if (got == 0) {
+      // Connection closed by peer
+      if (!connection_error_reported) {
+        printf("Connection closed by Amiga server\n");
+        connection_error_reported = 1;
+      }
+      return got;
     } else {
+      // Error occurred (including timeout)
+      if (!connection_error_reported) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          printf("Connection timeout - Amiga may have crashed or network connection lost\n");
+        } else {
+          printf("Network error: %s\n", strerror(errno));
+        }
+        connection_error_reported = 1;
+      }
       return got;
     }
   } while (total < length);
@@ -780,21 +812,88 @@ util_cd(const char* dir)
 }
 
 
+#ifdef _WIN32
+static int is_windows_reserved_name(const char* name) {
+  // Convert to uppercase for case-insensitive comparison
+  char upper_name[PATH_MAX];
+  size_t len = strlen(name);
+  size_t i;
+  
+  if (len >= PATH_MAX) {
+    return 0; // Too long to be a reserved name
+  }
+  
+  for (i = 0; i < len; i++) {
+    upper_name[i] = toupper(name[i]);
+  }
+  upper_name[len] = '\0';
+  
+  // Check for base reserved names (exact match)
+  const char* reserved_names[] = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    NULL
+  };
+  
+  // First check for exact matches
+  for (i = 0; reserved_names[i] != NULL; i++) {
+    if (strcmp(upper_name, reserved_names[i]) == 0) {
+      return 1;
+    }
+  }
+  
+  // Then check for reserved names with extensions (name.ext)
+  char *dot = strchr(upper_name, '.');
+  if (dot) {
+    *dot = '\0'; // Temporarily truncate at the dot
+    for (i = 0; reserved_names[i] != NULL; i++) {
+      if (strcmp(upper_name, reserved_names[i]) == 0) {
+        return 1;
+      }
+    }
+  }
+  
+  return 0;
+}
+#endif
+
 char*
 util_safeName(const char* name)
 {
-  char* safe = malloc(strlen(name)+1);
+  // Calculate required size: original length + potential "squirt_" prefix + null terminator
+  size_t safe_size = strlen(name) + 8; // "squirt_" (7) + null terminator (1)
+  char* safe = malloc(safe_size);
   char* dest = safe;
-  if (dest) {
-    while (*name) {
-      if (*name != ':') {
-	*dest = *name;
-	dest++;
-      }
-      name++;
-    }
-    *dest = 0;
+  
+  if (!dest) {
+    return NULL;
   }
-
+  
+#ifdef _WIN32
+  // Only apply Windows reserved name logic on Windows platforms
+  // Check if this is a Windows reserved name
+  int is_reserved = is_windows_reserved_name(name);
+  
+  // Add prefix for reserved names
+  if (is_reserved) {
+    strcpy(dest, "squirt_");
+    dest += 7; // Length of "squirt_"
+  }
+#endif
+  
+  // Copy the rest of the name, preserving Windows drive letter colons
+  int char_pos = 0;
+  while (*name) {
+    // Preserve colon if it's part of a Windows drive letter (position 1: C:, D:, etc.)
+    if (*name != ':' || (char_pos == 1 && isalpha(name[-1]))) {
+      *dest = *name;
+      dest++;
+    }
+    name++;
+    char_pos++;
+  }
+  *dest = 0;
+  
   return safe;
 }
