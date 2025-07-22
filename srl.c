@@ -7,6 +7,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <conio.h>
+#include "win_compat.h"
 #else
 #include <unistd.h>
 #include <termios.h>
@@ -53,11 +54,15 @@ static struct termios original_termios;
 #endif
 int _srl_inside_quotes_flag = 0;
 static int terminal_setup = 0;
+static int terminal_width = 0;
+static int terminal_height = 0;
+static int terminal_min_row = 0;
 
 // Input buffer and cursor management
 static char input_buffer[MAX_INPUT_LENGTH];
 static int cursor_pos = 0;
 static int buffer_length = 0;
+static char kill_buffer[MAX_INPUT_LENGTH] = {0};
 
 // History management
 #define MAX_HISTORY_ENTRIES 100
@@ -107,17 +112,131 @@ static void disable_raw_mode(void) {
 
 // Cursor and display functions
 
-static void refresh_line(void) {
-    printf("\r\033[K"); // Clear line
-    printf("%s", _srl_prompt ? _srl_prompt() : "");
-    printf("%.*s", buffer_length, input_buffer);
-    
-    // Move cursor to correct position
-    int chars_after_cursor = buffer_length - cursor_pos;
-    if (chars_after_cursor > 0) {
-        printf("\033[%dD", chars_after_cursor);
+#ifdef _WIN32
+static int
+srl_get_terminal_size(int *rows, int *cols) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+        if (cols) *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        if (rows) *rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+        return 0;
+    } else {
+        return -1; // failed to get console info
     }
+}
+
+static int
+srl_get_cursor_position(int *row, int *col) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+        if (col) *col = csbi.dwCursorPosition.X + 1; // 1-based column
+        if (row) *row = csbi.dwCursorPosition.Y + 1; // 1-based row
+        return 0;
+    } else {
+        return -1; // Failed
+    }
+}
+
+#else
+static int
+srl_get_terminal_size(int *rows, int *cols)
+{
+  char buf[64];
+  int i = 0;
+  
+  // Hide cursor, save cursor position, ESC 7, Mmve as far down and right as possible, move to bottom-right corner, request cursor position
+  printf("\033[?25l\0337\033[999B\033[999C\033[6n");
+  fflush(stdout);
+  
+  // Read response: ESC [ row ; col R
+  while (i < (int)(sizeof(buf) - 1)) {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1)
+      break;
+    if (buf[i] == 'R')
+      break;
+    i++;
+  }
+  buf[i + 1] = '\0';
+  
+  // Restore cursor position, show cursor
+  printf("\0338\033[?25h");
+  fflush(stdout);
+  
+  // Parse cursor position: ESC [ rows ; cols R
+  int r = 0, c = 0;
+  if (sscanf(buf, "\033[%d;%dR", &r, &c) == 2) {
+    if (rows) *rows = r;
+    if (cols) *cols = c;
+    return 0;
+  }
+  
+  return -1;
+}
+
+static int
+srl_get_cursor_position(int *row, int *col) {
+    char buf[32];
+    int i = 0;
+
+    // Send cursor position report request
+    printf("\033[6n");
     fflush(stdout);
+
+    // Read response
+    while (i < (int)(sizeof(buf) - 1)) {
+        if (read(STDIN_FILENO, &buf[i], 1) != 1)
+            break;
+        if (buf[i] == 'R')
+            break;
+        i++;
+    }
+    buf[i + 1] = '\0';
+
+    // Parse response: ESC [ rows ; cols R
+    int _row, _col;
+    if (sscanf(buf, "\033[%d;%dR", &_row, &_col) == 2) {
+      if (row) {
+	*row = _row;
+      }
+      if (col) {
+	*col = _col;
+      }
+      return 0;
+    }
+    return -1;
+}
+#endif
+
+static void
+refresh_line(void)
+{
+  int total_width = strlen(_srl_prompt()) + buffer_length;
+  int rows = (total_width / terminal_width);
+  int cursor_row = terminal_height-rows;
+  int cursor_width = strlen(_srl_prompt()) + cursor_pos + 1;
+  int cursor_rows = (cursor_width / terminal_width);
+  int cursor_cols = cursor_width % terminal_width;  
+
+  printf("\033[?25l"); // hide cursor
+  
+  while (terminal_min_row > cursor_row) {
+    printf("\033D"); // scroll      
+    terminal_min_row--;
+  }
+
+  printf("\033[%d;0H", terminal_min_row);  // move cursor to v,h
+  printf("%s", _srl_prompt ? _srl_prompt() : "");
+  printf("%.*s", buffer_length, input_buffer);
+  printf("\033[J\r"); //clear screen from cursor down    
+  printf("\033[%d;%dH", terminal_min_row+cursor_rows, cursor_cols);  // move cursor to v,h
+
+  printf("\033[?25h"); // Show cursor
+  
+  fflush(stdout);
 }
 
 // History functions
@@ -433,12 +552,16 @@ static void handle_tab_completion(void) {
 char *
 srl_gets(void)
 {
+    enable_raw_mode();
+
+    srl_get_terminal_size(&terminal_height, &terminal_width);
+    srl_get_cursor_position(&terminal_min_row, 0);
+  
     if (srl_line_read) {
         free(srl_line_read);
         srl_line_read = NULL;
     }
     
-    enable_raw_mode();
     
     // Initialize input state
     cursor_pos = 0;
@@ -455,7 +578,6 @@ srl_gets(void)
         int c;
 #ifdef _WIN32
         c = _getch(); // Windows console input
-        
         // Windows _getch() returns special codes for arrow keys
         if (c == 0 || c == 224) { // Extended key prefix
             c = _getch(); // Get the actual key code
@@ -528,12 +650,66 @@ srl_gets(void)
         }
         c = (int)ch; // Ensure proper character conversion
 #endif
-        
         if (c == '\r' || c == '\n') {
             // Enter pressed - finish input
             printf("\n");
             break;
-            
+
+	} else if (c == 1) { // ^a
+	  reset_tab_tracking(); // Reset tab completion tracking
+	  cursor_pos = 0;	  
+	  refresh_line();
+	} else if (c == 2) { // ^b
+	  reset_tab_tracking();
+	  if (cursor_pos > 0) {
+	    cursor_pos--;
+	  }
+	  refresh_line();
+	} else if (c == 4) { // ^d
+	  reset_tab_tracking(); // Reset tab completion tracking
+	  if (buffer_length > cursor_pos) {
+	    memmove(&input_buffer[cursor_pos], 
+		    &input_buffer[cursor_pos+1], 
+		    buffer_length - cursor_pos);
+	    buffer_length--;
+	    refresh_line();
+	  }
+	} else if (c == 5) { // ^e
+	  reset_tab_tracking(); // Reset tab completion tracking
+	  if (cursor_pos < buffer_length) {
+	    cursor_pos = buffer_length;	  	  
+	  }
+	  refresh_line();	  
+	} else if (c == 6) { // ^f
+	  reset_tab_tracking();
+	  if (cursor_pos < buffer_length) {
+	    cursor_pos++;
+	    refresh_line();
+	  }
+	} else if (c == 11) { // ^k
+	  reset_tab_tracking();
+	  memset(kill_buffer, 0, sizeof(kill_buffer));
+	  strncpy(kill_buffer, &input_buffer[cursor_pos], buffer_length-cursor_pos);
+	  input_buffer[cursor_pos] = 0;
+	  buffer_length = cursor_pos;
+	  refresh_line();
+	} else if (c == 12) { // ^l
+	  reset_tab_tracking();
+	  memset(input_buffer, 0, MAX_INPUT_LENGTH);	  
+	  terminal_min_row = 1;
+	  buffer_length = cursor_pos = 0;
+	  printf("\033[H");
+	  refresh_line();
+	} else if (c == 25) { // ^y
+	  reset_tab_tracking();	  
+	  char temp[MAX_INPUT_LENGTH] = {0};
+	  strncpy(temp, &input_buffer[cursor_pos], buffer_length-cursor_pos);	  
+	  input_buffer[cursor_pos] = 0;
+	  strlcat(input_buffer, kill_buffer, sizeof(input_buffer));
+	  cursor_pos = strlen(input_buffer);
+	  strlcat(input_buffer, temp, sizeof(input_buffer));
+	  buffer_length = strlen(input_buffer);
+	  refresh_line();	  	  
         } else if (c == '\t') {
             // Tab pressed - handle completion
             handle_tab_completion();
@@ -595,7 +771,7 @@ srl_gets(void)
                 reset_tab_tracking();
                 if (cursor_pos < buffer_length) {
                     cursor_pos++;
-                    printf("\033[C");
+		    refresh_line();		    
                     fflush(stdout);
                 }
                 continue;
@@ -604,8 +780,7 @@ srl_gets(void)
                 reset_tab_tracking();
                 if (cursor_pos > 0) {
                     cursor_pos--;
-                    printf("\033[D");
-                    fflush(stdout);
+		    refresh_line();
                 }
                 continue;
             } else if (seq[0] == '[') {
@@ -659,9 +834,8 @@ srl_gets(void)
                     case 'C': // Right arrow
                         reset_tab_tracking(); // Reset tab completion tracking
                         if (cursor_pos < buffer_length) {
-                            cursor_pos++;
-                            printf("\033[C");
-                            fflush(stdout);
+			    cursor_pos++;
+			    refresh_line();
                         }
                         break;
                         
@@ -669,8 +843,7 @@ srl_gets(void)
                         reset_tab_tracking(); // Reset tab completion tracking
                         if (cursor_pos > 0) {
                             cursor_pos--;
-                            printf("\033[D");
-                            fflush(stdout);
+			    refresh_line();			    
                         }
                         break;
                 }
@@ -688,8 +861,7 @@ srl_gets(void)
                 input_buffer[cursor_pos] = c;
                 cursor_pos++;
                 buffer_length++;
-                
-                refresh_line();
+		refresh_line();
             }
         }
     }
