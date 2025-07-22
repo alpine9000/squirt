@@ -241,6 +241,7 @@ backup_backupList(dir_entry_list_t* list)
 	}
       }
       int skip = skipFile;
+      int skipReason = 0; // 0=no skip, 1=metadata identical, 2=CRC32 verified identical
 
       if (!skipFile) {
 	dir_entry_t *temp = dir_newDirEntry();
@@ -250,6 +251,9 @@ backup_backupList(dir_entry_list_t* list)
 	    skip = exall_readExAllData(temp, path);
 	    if (skip) {
 	      skip = exall_identicalExAllData(temp, entry);
+	      if (skip) {
+	        skipReason = 1; // Skip due to metadata identical
+	      }
 	    }
 	  }
 	}
@@ -260,6 +264,10 @@ backup_backupList(dir_entry_list_t* list)
 	  if (crcResult == 1) {
 	    // CRC mismatch, don't skip the download
 	    skip = 0;
+	    skipReason = 0;
+	  } else if (crcResult == 0 && skip) {
+	    // CRC matches and file was going to be skipped - update reason
+	    skipReason = 2; // Skip due to CRC32 verification passed
 	  }
 	  // If crcResult == 2, file doesn't exist yet, we'll verify after download
 	}
@@ -268,6 +276,8 @@ backup_backupList(dir_entry_list_t* list)
       if (skip) {
 	if (skipFile) {
 	  printf("\xF0\x9F\x9A\xAB %c[1m%s \xE2\x80\x94\xE2\x80\x94\xE2\x80\x94SKIPPED\xE2\x80\x94\xE2\x80\x94\xE2\x80\x94 %c[0m\n", 27, path, 27); // utf-8 no entry bold
+	} else if (skipReason == 2) {
+	  printf("\xE2\x9C\x85 %s (CRC verified - no change)\n", path); // utf-8 tick with CRC verification message
 	} else {
 	  printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
 	}

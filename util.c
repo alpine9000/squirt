@@ -188,25 +188,14 @@ util_connect(const char* hostname)
     goto error;
   }
 #else
-  if (fcntl(main_socketFd, F_SETFL, flags) < 0) {
+  // Clear the O_NONBLOCK flag to ensure blocking mode
+  if (fcntl(main_socketFd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
     goto error;
   }
 #endif
 
-  // Set socket timeouts to prevent hanging on connection loss
-  struct timeval timeout;
-  timeout.tv_sec = 30;  // 30 second timeout
-  timeout.tv_usec = 0;
-  
-  // Set receive timeout
-  if (setsockopt(main_socketFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-    printf("Warning: Could not set socket receive timeout\n");
-  }
-  
-  // Set send timeout
-  if (setsockopt(main_socketFd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
-    printf("Warning: Could not set socket send timeout\n");
-  }
+  // Note: Socket-level timeouts (SO_RCVTIMEO/SO_SNDTIMEO) can cause issues
+  // Connection timeout is already handled above with select() during connect
 
   // Reset connection error flag for new connection
   util_resetConnectionErrorFlag();
@@ -893,13 +882,16 @@ util_safeName(const char* name)
   }
 #endif
   
-  // Copy the rest of the name, skipping colons
+  // Copy the rest of the name, preserving Windows drive letter colons
+  int char_pos = 0;
   while (*name) {
-    if (*name != ':') {
+    // Preserve colon if it's part of a Windows drive letter (position 1: C:, D:, etc.)
+    if (*name != ':' || (char_pos == 1 && isalpha(name[-1]))) {
       *dest = *name;
       dest++;
     }
     name++;
+    char_pos++;
   }
   *dest = 0;
   

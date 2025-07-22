@@ -10,7 +10,6 @@
 #include <limits.h>
 #include <getopt.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 
 
 #include "main.h"
@@ -389,34 +388,110 @@ restore_operation(const char* filename, void* data)
       
       // When restoring to Amiga, use the original filename as destination
       // but read from local safe filename
-      if (squirt_file(safeFilename, updateMessage, originalFilename, 1, restore_printProgress) != 0) {
-	fatalError("failed to restore %s\n", path);
+      int uploadAttempts = 0;
+      int maxAttempts = restore_crcVerify ? 3 : 1; // Allow retries only with CRC32 verification
+      
+      while (uploadAttempts < maxAttempts) {
+        uploadAttempts++;
+        
+        if (squirt_file(safeFilename, updateMessage, originalFilename, 1, restore_printProgress) != 0) {
+          fatalError("failed to restore %s\n", path);
+        }
+        
+        if (restore_crcVerify) {
+          int crcResult = backup_doCrcVerify(path);
+          if (crcResult == 1) {
+            // CRC mismatch
+            if (uploadAttempts < maxAttempts) {
+              printf("\n\xE2\x9D\x8C CRC32 mismatch for %s - retrying upload (attempt %d/%d)\n", path, uploadAttempts + 1, maxAttempts);
+              continue; // Retry upload
+            } else {
+              fatalError("CRC32 verification failed for %s after %d attempts", path, maxAttempts);
+            }
+          } else if (crcResult == 2) {
+            fatalError("CRC32 verification failed - remote file not found: %s", path);
+          }
+          // CRC verification passed (crcResult == 0)
+        }
+        
+        break; // Upload successful, exit retry loop
       }
+      
       if (restore_updateExAll(originalFilename, originalPath) != 0) {
 	fatalError("failed to update ExAll for %s", originalFilename);
-      }
-      if (restore_crcVerify) {
-	if (backup_doCrcVerify(path) != 0) {
-	  fatalError("crc32 checksum failed for %s", path);
-	}
       }
 #ifndef _WIN32
 	printf("\r%c[K", 27);
 #else
 	printf("\r");
 #endif
-	printf("\xE2\x9C\x85 %s restoring...done  \n", path); // utf-8 tick
+	if (restore_crcVerify) {
+	  printf("\xE2\x9C\x85 %s restoring...done (CRC OK)\n", path); // utf-8 tick with CRC verification
+	} else {
+	  printf("\xE2\x9C\x85 %s restoring...done\n", path); // utf-8 tick
+	}
       break;
     case UPDATE_NOUPDATE:
 
       if (restore_crcVerify) {
-	if (backup_doCrcVerify(path) != 0) {
-	  fatalError("crc32 checksum failed for %s", path);
+	int crcResult = backup_doCrcVerify(path);
+	if (crcResult == 1) {
+	  // CRC mismatch - file needs to be re-uploaded
+	  printf("\xE2\x9D\x8C CRC32 mismatch detected for %s - file will be re-uploaded\n", path);
+	  
+	  // Change update status to force re-upload
+	  printf("\xE2\x8C\x9B %s restoring...", path); // utf-8 hourglass
+	  fflush(stdout);
+	  
+	  // Perform upload with retry logic
+	  int retryAttempts = 0;
+	  int maxRetryAttempts = 3;
+	  
+	  while (retryAttempts < maxRetryAttempts) {
+	    retryAttempts++;
+	    
+	    if (squirt_file(safeFilename, path, originalFilename, 1, restore_printProgress) != 0) {
+	      fatalError("failed to restore %s\n", path);
+	    }
+	    
+	    int retryCrcResult = backup_doCrcVerify(path);
+	    if (retryCrcResult == 1) {
+	      // Still mismatch
+	      if (retryAttempts < maxRetryAttempts) {
+	        printf("\n\xE2\x9D\x8C CRC32 mismatch for %s - retrying upload (attempt %d/%d)\n", path, retryAttempts + 1, maxRetryAttempts);
+	        continue;
+	      } else {
+	        fatalError("CRC32 verification failed for %s after %d attempts", path, maxRetryAttempts);
+	      }
+	    } else if (retryCrcResult == 2) {
+	      fatalError("CRC32 verification failed - remote file not found: %s", path);
+	    }
+	    // CRC verification passed
+	    break;
+	  }
+	  
+	  if (restore_updateExAll(originalFilename, originalPath) != 0) {
+	    fatalError("failed to update ExAll for %s", originalFilename);
+	  }
+	  
+#ifndef _WIN32
+	  printf("\r%c[K", 27);
+#else
+	  printf("\r");
+#endif
+	  printf("\xE2\x9C\x85 %s restoring...done (CRC OK)\n", path); // utf-8 tick with CRC verification
+	} else if (crcResult == 2) {
+	  fatalError("CRC32 verification failed - remote file not found: %s", path);
+	} else {
+	  // CRC verification passed - file is identical
+	  if (!restore_quiet) {
+	    printf("\xE2\x9C\x85 %s (CRC verified - no change)\n", path); // utf-8 tick with CRC verification message
+	  }
 	}
-      }
-
-      if (!restore_quiet) {
-	printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+      } else {
+	if (!restore_quiet) {
+	  printf("\xE2\x9C\x85 %s\n", path); // utf-8 tick
+	}
       }
       break;
     }

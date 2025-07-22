@@ -140,14 +140,18 @@ exec_captureCmd(uint32_t* errorCode, int argc, char** argv)
 
   if (commandCode != SQUIRT_COMMAND_CD) {
     uint8_t c;
+    int exitState = 0;
     while (util_recv(main_socketFd, &c, 1, 0) == 1) {
       if (c == 0) {
-	if (outputSize >= outputLength) {
-	  outputLength = outputLength*2;
-	  output = realloc(output, outputLength);
-	}
-	output[outputSize++] = 0;
-	break;
+        exitState++;
+        if (exitState == 4) {
+          if (outputSize >= outputLength) {
+            outputLength = outputLength*2;
+            output = realloc(output, outputLength);
+          }
+          output[outputSize++] = 0;
+          break;
+        }
       } else {
 	if (outputSize >= outputLength) {
 	  outputLength = outputLength*2;

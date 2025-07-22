@@ -79,7 +79,7 @@ squirt_suckFile(const char* filename, const char* progressHeader,  void (*progre
   suck_fileFd = open(safeBaseName, O_WRONLY|O_CREAT|O_TRUNC|_O_BINARY, 0777);
   free(safeBaseName); // Free the allocated safe name
 
-  if (!suck_fileFd) {
+  if (suck_fileFd == -1) {
     fatalError("failed to open %s", baseName);
   }
 
