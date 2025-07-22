@@ -791,11 +791,40 @@ srl_gets(void)
             }
 #else
             // Simple approach: read the next two characters for ANSI escape sequences
-            if (read(STDIN_FILENO, &seq[0], 1) != 1) continue;
-            if (seq[0] != '[') continue; // Only handle ANSI sequences [A, [B, etc.
+            if (read(STDIN_FILENO, &seq[0], 1) != 1)  continue;
+
+            if (seq[0] != '[')  {
+	      switch (seq[0]) {
+	      case 'b': // alt-b
+		reset_tab_tracking();
+		while (cursor_pos > 0 && input_buffer[cursor_pos-1] == ' ') {
+		   cursor_pos--;
+		}
+		while (cursor_pos > 0 && input_buffer[cursor_pos-1] != ' ') {
+		  cursor_pos--;
+		}
+		refresh_line();
+		break;
+	      case 'f': // alt-f
+		reset_tab_tracking();
+		while (cursor_pos < buffer_length && input_buffer[cursor_pos+1] != ' ') {
+		   cursor_pos++;
+		}
+		while (cursor_pos < buffer_length && input_buffer[cursor_pos+1] == ' ') {
+		   cursor_pos++;
+		}
+		while (cursor_pos < buffer_length && input_buffer[cursor_pos] == ' ') {
+		   cursor_pos++;
+		}				
+		refresh_line();
+		break;		
+	      }
+	      continue;
+	    }
+
             if (read(STDIN_FILENO, &seq[1], 1) != 1) continue;
 #endif
-            
+
             if (seq[0] == '[') {
                 switch (seq[1]) {
                     case 'A': // Up arrow - previous history
