@@ -156,3 +156,5 @@ This software is free software. You can redistribute it and/or modify it under t
 This software is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 You should have received a copy of the GNU General Public License along with the software; see the file LICENSE.
+
+Source code is available at https://github.com/alpine9000/squirt

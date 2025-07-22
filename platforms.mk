@@ -31,6 +31,9 @@ endif
 MINGW_GCC_PREFIX=/usr/local/mingw
 MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
 MINGW_LIB_PATH=-L$(MINGW_GCC_PREFIX)/lib
+MUSL_GCC_PREFIX=/opt/homebrew
+MUSL_GCC=$(MUSL_GCC_PREFIX)/bin/x86_64-unknown-linux-musl-gcc
+MUSL_LIB_PATH=-L$(MINGW_GCC_PREFIX)/lib
 else ifeq ($(PLATFORM),raspberry_pi)
 # Raspberry Pi
 CC=gcc
