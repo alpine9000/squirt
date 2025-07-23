@@ -40,7 +40,7 @@ static int cli_isLocalCompletion = 0;  // Flag for local filesystem completion
 void
 cli_cleanup(void)
 {
-  srl_write_history();
+  srl_writeHistory();
 
   if (cli_readLineBase) {
     free(cli_readLineBase);
@@ -1403,8 +1403,7 @@ cli_getLocalFileSuggestion(int* list_index, const char* text, int len)
         int is_directory = (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode));
         
         // Add quoting for paths with spaces (like Amiga completion does)
-        extern int _srl_inside_quotes_flag;
-        int already_quoted = _srl_inside_quotes_flag;
+        int already_quoted = srl_insideQuotesFlag;
         
         if (strchr(result, ' ') != NULL) {
           // Path contains spaces - needs quoting
@@ -1496,8 +1495,7 @@ cli_completeGenerator(int* list_index, const char* text, int len)
       if (current_index == *list_index) {
         (*list_index)++;
         
-        extern int _srl_inside_quotes_flag;
-        int already_quoted = _srl_inside_quotes_flag;
+        int already_quoted = srl_insideQuotesFlag;
         
         if (entry->type > 0) {
           // Directory match

@@ -19,7 +19,8 @@
 
 static void
 backup_backupDir(const char* dir);
-
+static int
+backup_removeDirectoryRecursive(const char* dirname);
 
 static char* backup_currentDir = 0;
 static char* backup_skipFile = 0;
@@ -28,7 +29,7 @@ static int backup_prune = 0;
 static int backup_crcVerify = 0;
 
 void
-backup_cleanup()
+backup_cleanup(void)
 {
   if (backup_currentDir) {
     free(backup_currentDir);
@@ -66,12 +67,10 @@ backup_fullPath(const char* name)
   return path;
 }
 
-
-// Forward declaration for recursive function
-static int backup_removeDirectoryRecursive(const char* dirname);
-
 // Helper function to recursively remove a directory and all its contents
-static int backup_removeDirectoryRecursive(const char* dirname) {
+static int
+backup_removeDirectoryRecursive(const char* dirname)
+{
   DIR* dir;
   struct dirent* entry;
   char path[PATH_MAX];
