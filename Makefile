@@ -1,6 +1,14 @@
 RELEASE=true
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
 
+ifeq ($(RELEASE),true)
+CFLAGS=$(WARNINGS) -O2
+LDFLAGS=-s
+else
+CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS)
+LDFLAGS=
+endif
+
 include platforms.mk
 
 SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c crc32.c
@@ -11,14 +19,6 @@ COMMON_DEPS=Makefile platforms.mk mingw.mk
 DEBUG_CFLAGS=-g $(STATIC_ANALYZE)
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors  -Wno-strict-prototypes
 
-ifeq ($(RELEASE),true)
-CFLAGS=$(WARNINGS) -O2
-LDFLAGS=-s
-else
-CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS)
-LDFLAGS=
-endif
-
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))
 SUM_OBJS=$(addprefix build/obj/, $(SUM_SRCS:.c=.o))
 HOST_CLIENT_APPS=$(addprefix build/, $(CLIENT_APPS))
@@ -26,30 +26,48 @@ AMIGA_APPS=build/amiga/squirtd build/amiga/ssum build/amiga/skill build/amiga/sp
 
 RELEASE_VERSION=v0.4
 RELEASE_DIR=release/squirt
+RELEASE_OSX_DIR=squirt-osx-sequoia-arm64-$(RELEASE_VERSION)
+RELEASE_W32_DIR=squirt-w32-x86-64-$(RELEASE_VERSION)
+RELEASE_LINUX_DIR=squirt-linux-x86-$(RELEASE_VERSION)
+RELEASE_AMIGA_DIR=squirt-amiga-$(RELEASE_VERSION)
+RELEASE_OSX_ASSET=squirt-osx-sequoia-arm64-$(RELEASE_VERSION).tgz
+RELEASE_LINUX_ASSET=squirt-linux-x86-$(RELEASE_VERSION).tgz
+RELEASE_WIN32_ASSET=squirt-w32-x86-64-$(RELEASE_VERSION).zip
+RELEASE_AMIGA_ASSET=squirt-amiga-$(RELEASE_VERSION).lha
 
 all: $(HOST_CLIENT_APPS) $(AMIGA_APPS)
 
 release: all mingw musl
-	rm -rf release
-	mkdir release
-	mkdir $(RELEASE_DIR)
-	mkdir $(RELEASE_DIR)/osx-sequoia
-	mkdir $(RELEASE_DIR)/amiga
-	mkdir $(RELEASE_DIR)/w32-x86-64
-	mkdir $(RELEASE_DIR)/linux
-	cp LICENSE README.md $(RELEASE_DIR)/osx-sequoia
-	cp LICENSE README.md $(RELEASE_DIR)/w32-x86-64
-	cp LICENSE README.md $(RELEASE_DIR)/amiga
-	cp LICENSE README.md $(RELEASE_DIR)/linux
-	cp doc/inetd.md $(RELEASE_DIR)/amiga
-	cp $(HOST_CLIENT_APPS) $(RELEASE_DIR)/osx-sequoia
-	cp $(MINGW_APPS) $(RELEASE_DIR)/w32-x86-64
-	cp $(AMIGA_APPS) $(RELEASE_DIR)/amiga
-	cp $(MUSL_APPS) $(RELEASE_DIR)/linux
-	cd $(RELEASE_DIR) && tar zcfv ../squirt-osx-$(RELEASE_VERSION).tgz osx-sequoia
-	cd $(RELEASE_DIR) && tar zcfv ../squirt-linux-$(RELEASE_VERSION).tgz linux
-	cd $(RELEASE_DIR) && lha a ../squirt-amiga-$(RELEASE_VERSION).lha amiga
-	cd $(RELEASE_DIR) && zip -r ../squirt-w32-x86-64-$(RELEASE_VERSION).zip w32-x86-64
+	@rm -rf release
+	@mkdir release
+	@mkdir $(RELEASE_DIR)
+	@mkdir $(RELEASE_DIR)/$(RELEASE_OSX_DIR)
+	@mkdir $(RELEASE_DIR)/$(RELEASE_W32_DIR)
+	@mkdir $(RELEASE_DIR)/$(RELEASE_LINUX_DIR)
+	@mkdir $(RELEASE_DIR)/$(RELEASE_AMIGA_DIR)
+	@cp LICENSE README.md $(RELEASE_DIR)/$(RELEASE_OSX_DIR)
+	@cp LICENSE README.md $(RELEASE_DIR)/$(RELEASE_W32_DIR)
+	@cp LICENSE README.md $(RELEASE_DIR)/$(RELEASE_LINUX_DIR)
+	@cp LICENSE README.md $(RELEASE_DIR)/$(RELEASE_AMIGA_DIR)
+	@cp doc/inetd.md $(RELEASE_DIR)/$(RELEASE_AMIGA_DIR)
+	@cp $(HOST_CLIENT_APPS) $(RELEASE_DIR)/$(RELEASE_OSX_DIR)
+	@cp $(MINGW_APPS) $(RELEASE_DIR)/$(RELEASE_W32_DIR)
+	@cp $(MUSL_APPS) $(RELEASE_DIR)/$(RELEASE_LINUX_DIR)
+	@cp $(AMIGA_APPS) $(RELEASE_DIR)/$(RELEASE_AMIGA_DIR)
+	@echo "\n###### Creating OSX Release ##########\n"
+	@cd $(RELEASE_DIR) && tar zcfv ../$(RELEASE_OSX_ASSET) $(RELEASE_OSX_DIR)
+	@echo "\n\n###### Creating Linux Release ######\n"
+	@cd $(RELEASE_DIR) && gtar zcfv ../$(RELEASE_LINUX_ASSET) $(RELEASE_LINUX_DIR)
+	@echo "\n###### Creating Windows Release ######\n"
+	@cd $(RELEASE_DIR) && zip -r ../$(RELEASE_WIN32_ASSET) $(RELEASE_W32_DIR)
+	@echo "\n###### Creating Amiga Release ########\n"
+	@cd $(RELEASE_DIR) && lha a ../$(RELEASE_AMIGA_ASSET) $(RELEASE_AMIGA_DIR)
+	@echo "\n######################################\n"
+	@ls -lh release/$(RELEASE_OSX_ASSET)
+	@ls -lh release/$(RELEASE_LINUX_ASSET)
+	@ls -lh release/$(RELEASE_WIN32_ASSET)
+	@ls -lh release/$(RELEASE_AMIGA_ASSET)
+
 
 client: $(HOST_CLIENT_APPS)
 

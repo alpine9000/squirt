@@ -22,9 +22,11 @@ MINGW_LIBS=-lws2_32 -liconv -static
 ifeq ($(PLATFORM),osx)
 # OSX
 CC=gcc -I/opt/homebrew/opt/libiconv/include
+LDFLAGS=
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined
 ifeq ($(RELEASE),true)
-LIBS=-L/opt/homebrew/opt/libiconv/lib -liconv -lcharset -ltermcap
+#LIBS=-L/opt/homebrew/opt/libiconv/lib -liconv -lcharset -ltermcap
+LIBS=/opt/homebrew/Cellar/libiconv/1.17/lib/libiconv.a 
 else
 LIBS=-liconv -ltermcap
 endif
