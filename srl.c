@@ -554,6 +554,9 @@ srl_handleTabCompletion(void)
     // Second tab or no partial completion possible - display all matches
     if (is_consecutive_tab || extended_common_len == 0) {
       printf("\n");
+      if (srl_terminalMinRow < srl_terminalHeight) {      
+	srl_terminalMinRow++;
+      }
       // Move cursor to column 1 for proper alignment of suggestions
       printf("\r");
       
@@ -612,6 +615,9 @@ srl_handleTabCompletion(void)
 	printf("%s  ", display_name);
       }
       printf("\n");
+      if (srl_terminalMinRow < srl_terminalHeight) {
+	srl_terminalMinRow++;
+      }
       
       // Properly refresh the current line using our existing refresh function
       srl_refreshLine();
