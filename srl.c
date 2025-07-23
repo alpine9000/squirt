@@ -20,7 +20,9 @@
 #define MAX_INPUT_LENGTH 1024
 
 // Custom input wrapper state
-static char* srl_line_read = 0;
+static char *srl_line_read = 0;
+static int _srl_search_mode = 0;
+static int _srl_search_count = 0;
 static const char* (*_srl_prompt)(void);
 static void (*_srl_complete_hook)(const char* text, const char* full_command_line);
 static char* (*_srl_generator)(int* list_index, const char* text, int len);
@@ -43,6 +45,10 @@ static void load_history(void);
 static void reset_tab_tracking(void) {
     last_completion_cursor = -1;
     last_completion_length = -1;
+    if ( _srl_search_mode) {
+      _srl_search_mode = 0;
+      refresh_line();
+    }    
 }
 
 // Terminal control
@@ -63,6 +69,8 @@ static char input_buffer[MAX_INPUT_LENGTH];
 static int cursor_pos = 0;
 static int buffer_length = 0;
 static char kill_buffer[MAX_INPUT_LENGTH] = {0};
+static char search_buffer[MAX_INPUT_LENGTH] = {0};
+static char search_prompt[MAX_INPUT_LENGTH] = {0};
 
 // History management
 #define MAX_HISTORY_ENTRIES 100
@@ -211,13 +219,28 @@ srl_get_cursor_position(int *row, int *col) {
 }
 #endif
 
+static const char *
+srl_get_prompt(void)
+{
+  if (_srl_search_mode) {
+    strcpy(search_prompt, "(reverse-i-search)`");
+    strlcat(search_prompt, search_buffer, sizeof(search_prompt));
+    strlcat(search_prompt, "':",  sizeof(search_prompt));
+    return search_prompt;      
+  }
+  if (_srl_prompt) {
+    return _srl_prompt();
+  } else {
+    return "";
+  }
+}
 static void
 refresh_line(void)
 {
-  int total_width = strlen(_srl_prompt()) + buffer_length;
+  int total_width = strlen(srl_get_prompt()) + buffer_length;
   int rows = (total_width / terminal_width);
   int cursor_row = terminal_height-rows;
-  int cursor_width = strlen(_srl_prompt()) + cursor_pos + 1;
+  int cursor_width = strlen(srl_get_prompt()) + cursor_pos + 1;
   int cursor_rows = (cursor_width / terminal_width);
   int cursor_cols = cursor_width % terminal_width;  
 
@@ -229,7 +252,7 @@ refresh_line(void)
   }
 
   printf("\033[%d;0H", terminal_min_row);  // move cursor to v,h
-  printf("%s", _srl_prompt ? _srl_prompt() : "");
+  printf("%s",  srl_get_prompt());
   printf("%.*s", buffer_length, input_buffer);
   printf("\033[J\r"); //clear screen from cursor down    
   printf("\033[%d;%dH", terminal_min_row+cursor_rows, cursor_cols);  // move cursor to v,h
@@ -240,6 +263,29 @@ refresh_line(void)
 }
 
 // History functions
+static const char* find_history_match(const char* candidate, int n)
+{
+  if (!candidate || n < 0) return NULL;
+
+  int match_index = 0;
+  const char* last_content = NULL;
+
+  for (int i = MAX_HISTORY_ENTRIES - 1; i >= 0; i--) {
+    const char* entry = history[i];
+    if (entry && strstr(entry, candidate)) {
+      if (!last_content || strcmp(entry, last_content) != 0) {
+        if (match_index == n) {
+          return entry;
+        }
+        last_content = entry;
+        match_index++;
+      }
+    }
+  }
+
+  return NULL;
+}
+
 static void add_to_history(const char* line) {
     if (!line || !*line) return;
     
@@ -554,6 +600,8 @@ srl_gets(void)
 {
     enable_raw_mode();
 
+    _srl_search_mode = 0;
+    search_buffer[0] = 0;
     srl_get_terminal_size(&terminal_height, &terminal_width);
     srl_get_cursor_position(&terminal_min_row, 0);
   
@@ -570,7 +618,7 @@ srl_gets(void)
     memset(input_buffer, 0, MAX_INPUT_LENGTH);
     
     // Display prompt
-    printf("%s", _srl_prompt ? _srl_prompt() : "");
+    printf("%s",  srl_get_prompt());
     fflush(stdout);
     
     // Main input loop
@@ -652,6 +700,10 @@ srl_gets(void)
 #endif
         if (c == '\r' || c == '\n') {
             // Enter pressed - finish input
+	    if (_srl_search_mode) {
+	      _srl_search_mode = 0;
+	      refresh_line();
+	    }
             printf("\n");
             break;
 
@@ -700,6 +752,20 @@ srl_gets(void)
 	  buffer_length = cursor_pos = 0;
 	  printf("\033[H");
 	  refresh_line();
+	} else if (c == 18) { // ^r
+	  if (!_srl_search_mode) {	    
+	    _srl_search_mode = 1;
+	    _srl_search_count = 0;
+	    search_buffer[0] = 0;
+	  } else {
+	    const char* match = find_history_match(search_buffer, ++_srl_search_count);
+	    if (match) {
+	      strlcpy(input_buffer, match, sizeof(input_buffer));
+	      buffer_length = strlen(input_buffer);
+	    }
+	    refresh_line();	    
+	  }
+	  refresh_line();
 	} else if (c == 25) { // ^y
 	  reset_tab_tracking();	  
 	  char temp[MAX_INPUT_LENGTH] = {0};
@@ -716,19 +782,31 @@ srl_gets(void)
             
         } else if (c == 127 || c == '\b') {
             // Backspace
-            reset_tab_tracking(); // Reset tab completion tracking
-            if (cursor_pos > 0) {
+	    if (_srl_search_mode) {
+	      const int len = strlen(search_buffer);
+	      if (len > 0) {
+		search_buffer[len-1] = 0;
+	      }
+	      refresh_line();
+	    } else {
+	      reset_tab_tracking(); // Reset tab completion tracking	      
+	      if (cursor_pos > 0) {
                 memmove(&input_buffer[cursor_pos-1], 
-                       &input_buffer[cursor_pos], 
-                       buffer_length - cursor_pos);
+			&input_buffer[cursor_pos], 
+			buffer_length - cursor_pos);
                 cursor_pos--;
                 buffer_length--;
                 refresh_line();
-            }
+	      }
+	    }
             
         } else if (c == 27) {
             // Escape sequence - handle arrow keys
             char seq[3];
+	    if (_srl_search_mode) {
+	      _srl_search_mode = 0;
+	      refresh_line();
+	    }
 #ifdef _WIN32
             seq[0] = _getch();
             // Windows console sends different escape sequences
@@ -879,19 +957,32 @@ srl_gets(void)
             }
             
         } else if (c >= 32 && c <= 126) {
-            // Regular printable character
-            reset_tab_tracking(); // Reset tab completion tracking
-            if (buffer_length < MAX_INPUT_LENGTH - 1) {
+      	    if (_srl_search_mode) {
+	      if (strlen(search_buffer) < MAX_INPUT_LENGTH - 1) {
+		char temp[2] = {c, 0};
+		strlcat(search_buffer, temp, sizeof(search_buffer));
+		const char* match = find_history_match(search_buffer, _srl_search_count);
+		if (match) {
+		  strlcpy(input_buffer, match, sizeof(input_buffer));
+		  buffer_length = strlen(input_buffer);
+		}
+		refresh_line();
+	      }
+	    } else {
+	      reset_tab_tracking(); // Reset tab completion tracking	      
+	      // Regular printable character
+	      if (buffer_length < MAX_INPUT_LENGTH - 1) {
                 // Make space for new character
                 memmove(&input_buffer[cursor_pos + 1], 
-                       &input_buffer[cursor_pos], 
-                       buffer_length - cursor_pos);
+			&input_buffer[cursor_pos], 
+			buffer_length - cursor_pos);
                 
                 input_buffer[cursor_pos] = c;
                 cursor_pos++;
                 buffer_length++;
 		refresh_line();
-            }
+	      }
+	    }
         }
     }
     
