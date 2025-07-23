@@ -219,6 +219,27 @@ srl_get_cursor_position(int *row, int *col) {
 }
 #endif
 
+static void
+terminal_cursor_forward(void)
+{
+  reset_tab_tracking();
+  if (cursor_pos < buffer_length) {
+    cursor_pos++;
+    refresh_line();
+  }
+}
+
+
+static void
+terminal_cursor_back(void)
+{
+  reset_tab_tracking();
+  if (cursor_pos > 0) {
+    cursor_pos--;
+  }
+  refresh_line();
+}
+
 static const char *
 srl_get_prompt(void)
 {
@@ -234,6 +255,8 @@ srl_get_prompt(void)
     return "";
   }
 }
+
+
 static void
 refresh_line(void)
 {
@@ -263,7 +286,45 @@ refresh_line(void)
 }
 
 // History functions
-static const char* find_history_match(const char* candidate, int n)
+static void
+history_select_next(void)
+{
+  reset_tab_tracking();
+  if (history_index >= 0) {
+    history_index++;
+    if (history_index >= history_count) {
+      history_index = -1;
+      input_buffer[0] = '\0';
+      buffer_length = 0;
+      cursor_pos = 0;
+    } else {
+      strcpy(input_buffer, history[history_index]);
+      buffer_length = strlen(input_buffer);
+      cursor_pos = buffer_length;
+    }
+    refresh_line();
+  }
+}
+
+static void
+history_select_prev(void)
+{
+  reset_tab_tracking(); // Reset tab completion tracking
+  if (history_count > 0) {
+    if (history_index == -1) history_index = history_count - 1;
+    else if (history_index > 0) history_index--;
+    
+    if (history_index >= 0) {
+      strcpy(input_buffer, history[history_index]);
+      buffer_length = strlen(input_buffer);
+      cursor_pos = buffer_length;
+      refresh_line();
+    }
+  }
+}
+
+static const
+char* find_history_match(const char* candidate, int n)
 {
   if (!candidate || n < 0) return NULL;
 
@@ -631,54 +692,19 @@ srl_gets(void)
             c = _getch(); // Get the actual key code
             switch (c) {
                 case 72: // Up arrow
-                    reset_tab_tracking();
-                    if (history_count > 0) {
-                        if (history_index == -1) history_index = history_count - 1;
-                        else if (history_index > 0) history_index--;
-                        
-                        if (history_index >= 0) {
-                            strcpy(input_buffer, history[history_index]);
-                            buffer_length = strlen(input_buffer);
-                            cursor_pos = buffer_length;
-                            refresh_line();
-                        }
-                    }
+		    history_select_prev();
                     continue;
                     
                 case 80: // Down arrow
-                    reset_tab_tracking();
-                    if (history_index >= 0) {
-                        history_index++;
-                        if (history_index >= history_count) {
-                            history_index = -1;
-                            input_buffer[0] = '\0';
-                            buffer_length = 0;
-                            cursor_pos = 0;
-                        } else {
-                            strcpy(input_buffer, history[history_index]);
-                            buffer_length = strlen(input_buffer);
-                            cursor_pos = buffer_length;
-                        }
-                        refresh_line();
-                    }
+		    history_select_next();
                     continue;
                     
                 case 77: // Right arrow
-                    reset_tab_tracking();
-                    if (cursor_pos < buffer_length) {
-                        cursor_pos++;
-                        printf("\033[C");
-                        fflush(stdout);
-                    }
+		    terminal_cursor_forward();
                     continue;
                     
                 case 75: // Left arrow
-                    reset_tab_tracking();
-                    if (cursor_pos > 0) {
-                        cursor_pos--;
-                        printf("\033[D");
-                        fflush(stdout);
-                    }
+		    terminal_cursor_back();
                     continue;
                     
                 default:
@@ -712,11 +738,7 @@ srl_gets(void)
 	  cursor_pos = 0;	  
 	  refresh_line();
 	} else if (c == 2) { // ^b
-	  reset_tab_tracking();
-	  if (cursor_pos > 0) {
-	    cursor_pos--;
-	  }
-	  refresh_line();
+	  terminal_cursor_back();
 	} else if (c == 4) { // ^d
 	  reset_tab_tracking(); // Reset tab completion tracking
 	  if (buffer_length > cursor_pos) {
@@ -733,11 +755,7 @@ srl_gets(void)
 	  }
 	  refresh_line();	  
 	} else if (c == 6) { // ^f
-	  reset_tab_tracking();
-	  if (cursor_pos < buffer_length) {
-	    cursor_pos++;
-	    refresh_line();
-	  }
+	  terminal_cursor_forward();
 	} else if (c == 11) { // ^k
 	  reset_tab_tracking();
 	  memset(kill_buffer, 0, sizeof(kill_buffer));
@@ -752,6 +770,10 @@ srl_gets(void)
 	  buffer_length = cursor_pos = 0;
 	  printf("\033[H");
 	  refresh_line();
+	} else if (c == 14) { // ^n
+	  history_select_next();
+	} else if (c == 16) { // ^p
+	  history_select_prev();
 	} else if (c == 18) { // ^r
 	  if (!_srl_search_mode) {	    
 	    _srl_search_mode = 1;
@@ -813,53 +835,19 @@ srl_gets(void)
             // Handle both Windows format (ESC + single char) and ANSI format
             if (seq[0] == 'H') {
                 // Windows: Up arrow = ESC H
-                reset_tab_tracking();
-                if (history_count > 0) {
-                    if (history_index == -1) history_index = history_count - 1;
-                    else if (history_index > 0) history_index--;
-                    
-                    if (history_index >= 0) {
-                        strcpy(input_buffer, history[history_index]);
-                        buffer_length = strlen(input_buffer);
-                        cursor_pos = buffer_length;
-                        refresh_line();
-                    }
-                }
+	        history_select_prev();
                 continue;
             } else if (seq[0] == 'P') {
                 // Windows: Down arrow = ESC P
-                reset_tab_tracking();
-                if (history_index >= 0) {
-                    history_index++;
-                    if (history_index >= history_count) {
-                        history_index = -1;
-                        input_buffer[0] = '\0';
-                        buffer_length = 0;
-                        cursor_pos = 0;
-                    } else {
-                        strcpy(input_buffer, history[history_index]);
-                        buffer_length = strlen(input_buffer);
-                        cursor_pos = buffer_length;
-                    }
-                    refresh_line();
-                }
+	        history_select_next();
                 continue;
             } else if (seq[0] == 'M') {
                 // Windows: Right arrow = ESC M
-                reset_tab_tracking();
-                if (cursor_pos < buffer_length) {
-                    cursor_pos++;
-		    refresh_line();		    
-                    fflush(stdout);
-                }
+	        terminal_cursor_forward();
                 continue;
             } else if (seq[0] == 'K') {
                 // Windows: Left arrow = ESC K
-                reset_tab_tracking();
-                if (cursor_pos > 0) {
-                    cursor_pos--;
-		    refresh_line();
-                }
+	        terminal_cursor_back();
                 continue;
             } else if (seq[0] == '[') {
                 // ANSI escape sequence (fallback)
@@ -906,52 +894,19 @@ srl_gets(void)
             if (seq[0] == '[') {
                 switch (seq[1]) {
                     case 'A': // Up arrow - previous history
-                        reset_tab_tracking(); // Reset tab completion tracking
-                        if (history_count > 0) {
-                            if (history_index == -1) history_index = history_count - 1;
-                            else if (history_index > 0) history_index--;
-                            
-                            if (history_index >= 0) {
-                                strcpy(input_buffer, history[history_index]);
-                                buffer_length = strlen(input_buffer);
-                                cursor_pos = buffer_length;
-                                refresh_line();
-                            }
-                        }
+		        history_select_prev();
                         break;
                         
                     case 'B': // Down arrow - next history
-                        reset_tab_tracking(); // Reset tab completion tracking
-                        if (history_index >= 0) {
-                            history_index++;
-                            if (history_index >= history_count) {
-                                history_index = -1;
-                                input_buffer[0] = '\0';
-                                buffer_length = 0;
-                                cursor_pos = 0;
-                            } else {
-                                strcpy(input_buffer, history[history_index]);
-                                buffer_length = strlen(input_buffer);
-                                cursor_pos = buffer_length;
-                            }
-                            refresh_line();
-                        }
+			history_select_next();
                         break;
                         
                     case 'C': // Right arrow
-                        reset_tab_tracking(); // Reset tab completion tracking
-                        if (cursor_pos < buffer_length) {
-			    cursor_pos++;
-			    refresh_line();
-                        }
+		        terminal_cursor_forward();
                         break;
                         
                     case 'D': // Left arrow
-                        reset_tab_tracking(); // Reset tab completion tracking
-                        if (cursor_pos > 0) {
-                            cursor_pos--;
-			    refresh_line();			    
-                        }
+		        terminal_cursor_back();
                         break;
                 }
             }
