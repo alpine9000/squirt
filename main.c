@@ -49,7 +49,6 @@ main_fatalError(const char *format, ...)
   main_cleanupAndExit(EXIT_FAILURE);
 }
 
-
 int main(int argc, char* argv[])
 {
   main_argv0 = argv[0];
@@ -67,24 +66,31 @@ int main(int argc, char* argv[])
   WSAStartup(MAKEWORD(2,2), &wsaData);
 #endif
 
-
-  if (strstr(basename(argv[0]), "squirt_suck")) {
-    suck_main(argc, argv);
-  } else  if (strstr(basename(argv[0]), "squirt_exec")) {
-    exec_main(argc, argv);
-  } else if (strstr(basename(argv[0]), "squirt_cli")) {
-    cli_main(argc, argv);
-  } else if (strstr(basename(argv[0]), "squirt_dir")) {
-    dir_main(argc, argv);
-  } else if (strstr(basename(argv[0]), "squirt_backup")) {
-    backup_main(argc, argv);
-  } else if (strstr(basename(argv[0]), "squirt_restore")) {
-    restore_main(argc, argv);
-  } else if (strstr(basename(argv[0]), "squirt_cwd")) {
-    cwd_main(argc, argv);
+  config_load();
+  
+  if (strstr(basename(argv[0]), "squirt_config")) {
+    config_main(argc, argv);
   } else {
-    squirt_main(argc, argv);
+    config_patchDefaultHostname(&argc, &argv);
+    
+    if (strstr(basename(argv[0]), "squirt_suck")) {
+      suck_main(argc, argv);
+    } else  if (strstr(basename(argv[0]), "squirt_exec")) {
+      exec_main(argc, argv);
+    } else if (strstr(basename(argv[0]), "squirt_cli")) {
+      cli_main(argc, argv);
+    } else if (strstr(basename(argv[0]), "squirt_dir")) {
+      dir_main(argc, argv);
+    } else if (strstr(basename(argv[0]), "squirt_backup")) {
+      backup_main(argc, argv);
+    } else if (strstr(basename(argv[0]), "squirt_restore")) {
+      restore_main(argc, argv);
+    } else if (strstr(basename(argv[0]), "squirt_cwd")) {
+      cwd_main(argc, argv);
+    } else {
+      squirt_main(argc, argv);
+    }
   }
-
+  
   main_cleanupAndExit(EXIT_SUCCESS);
 }

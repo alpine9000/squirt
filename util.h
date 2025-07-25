@@ -94,3 +94,6 @@ util_cd(const char* dir);
 
 char*
 util_safeName(const char* name);
+
+int
+util_isHostname(const char* name);    

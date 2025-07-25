@@ -1,4 +1,7 @@
 RELEASE=true
+# config loading/save - a bit new so leave disabled for now
+SQUIRT_CONFIG=false
+
 CLIENT_APPS=squirt_exec squirt_suck squirt_dir squirt_backup squirt squirt_cli squirt_cwd squirt_restore
 
 ifeq ($(RELEASE),true)
@@ -9,14 +12,19 @@ CFLAGS=$(DEBUG_CFLAGS) $(WARNINGS)
 LDFLAGS=
 endif
 
+ifeq ($(SQUIRT_CONFIG),true)
+CLIENT_APPS += squirt_config
+CFLAGS += -DSQUIRT_CONFIG
+endif
+
 include platforms.mk
 
-SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c crc32.c
+SQUIRT_SRCS=squirt.c exec.c suck.c dir.c main.c cli.c cwd.c srl.c util.c argv.c backup.c restore.c exall.c protect.c crc32.c config.c win_compat.c
 SUM_SRCS=sum.c crc32.c
-HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h win_compat.h
+HEADERS=main.h squirt.h exec.h cwd.h dir.h srl.h cli.h backup.h argv.h common.h util.h main.h suck.h restore.h exall.h protect.h win_compat.h config.h
 COMMON_DEPS=Makefile platforms.mk mingw.mk
 
-DEBUG_CFLAGS=-g $(STATIC_ANALYZE)
+DEBUG_CFLAGS=-g $(STATIC_ANALYZE) -Wno-deprecated-declarations
 WARNINGS=-Wno-error=format -Wno-format -Wall -Werror -Wall -Wpedantic -Wno-unknown-attributes -Wno-ignored-optimization-argument -Wno-unknown-pragmas  -Wmissing-field-initializers -Wfatal-errors -Wextra -Wshadow -Wuninitialized  -Wundef -Wbad-function-cast -Wparentheses -Wnull-dereference -pedantic-errors  -Wno-strict-prototypes
 
 SQUIRT_OBJS=$(addprefix build/obj/, $(SQUIRT_SRCS:.c=.o))

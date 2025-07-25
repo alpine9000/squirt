@@ -12,6 +12,7 @@
 #include "squirt.h"
 #include "restore.h"
 #include "protect.h"
+#include "config.h"
 
 #ifndef _WIN32
 #include <netinet/in.h>
@@ -19,8 +20,11 @@
 #else
 #include <stdint.h>
 #include <winsock.h>
+#include <windows.h>
+#include "win_compat.h"
 #endif
 
+#define countof(x) ((int)(sizeof(x)/sizeof(x[0])))
 
 extern const char* main_argv0;
 extern int main_screenWidth;

@@ -65,15 +65,15 @@ util_getHomeDir(void)
 #endif
 }
 
-static int
+int
 util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)
 {
   struct hostent * remote;
 
   if ((remote = gethostbyname(host)) != NULL) {
     char **ip_addr;
-    memcpy(&ip_addr, &(remote->h_addr_list[0]), sizeof(void *));
-    memcpy(&addr->sin_addr.s_addr, ip_addr, sizeof(struct in_addr));
+    memcpy(&ip_addr, (void*)&(remote->h_addr_list[0]), sizeof(void *));
+    memcpy(&addr->sin_addr.s_addr, (void*)ip_addr, sizeof(struct in_addr));
   } else if ((addr->sin_addr.s_addr = inet_addr(host)) == (unsigned long)INADDR_NONE) {
     return 0;
   }
@@ -84,9 +84,29 @@ util_getSockAddr(const char * host, int port, struct sockaddr_in * addr)
   return 1;
 }
 
+#ifdef SQUIRT_CONFIG
+int
+util_isHostname(const char *__hostname)
+{
+  struct sockaddr_in sockAddr;
+  int port=NETWORK_PORT;
+  char* _hostname = strdup(__hostname);
+  char *colon = strstr(_hostname,":");
+
+  if (colon) {
+    port=strtol(colon+1,NULL,10);
+    *colon=0;   // end hostname string here
+  }
+
+  const char* hostname = config_getAlias(_hostname);
+  int result = util_getSockAddr(hostname, port, &sockAddr);
+  free((void*)_hostname);
+  return result;  
+}
+#endif
 
 void
-util_connect(const char* hostname)
+util_connect(const char* __hostname)
 {
   struct sockaddr_in sockAddr;
   int result;
@@ -98,15 +118,16 @@ util_connect(const char* hostname)
   int flags;
 #endif
 
+  
   int port=NETWORK_PORT;
-
-  char *colon=strstr(hostname,":");
-  if(colon)
-  {
-          port=strtol(colon+1,NULL,10);
-          *colon=0;   // end hostname string here
+  char* _hostname = strdup(__hostname);
+  char *colon = strstr(_hostname,":");
+  if(colon) {
+    port=strtol(colon+1,NULL,10);
+    *colon=0;   // end hostname string here
   }
 
+  const char* hostname = config_getAlias(_hostname);
 
   if (!util_getSockAddr(hostname, port, &sockAddr)) {
     goto error;
@@ -199,14 +220,14 @@ util_connect(const char* hostname)
 
   // Reset connection error flag for new connection
   util_resetConnectionErrorFlag();
-
+  free(_hostname);
   return;
  error:
   if (main_socketFd >= 0) {
     close(main_socketFd);
     main_socketFd = -1;
   }
-  fatalError("failed to connect to server %s:%d", hostname,port);
+  fatalError("failed to connect to server %s:%d", hostname, port);
 }
 
 

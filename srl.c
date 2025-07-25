@@ -5,9 +5,7 @@
 #include "main.h"
 
 #ifdef _WIN32
-#include <windows.h>
 #include <conio.h>
-#include "win_compat.h"
 #else
 #include <unistd.h>
 #include <termios.h>
