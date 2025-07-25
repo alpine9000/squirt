@@ -3,6 +3,10 @@ MINGW_GCC_CFLAGS=-O2 -s $(WARNINGS) -I/$(MINGW_GCC_PREFIX)/include
 MINGW_APPS=$(addsuffix .exe, $(addprefix build/mingw/, $(CLIENT_APPS)))
 SQUIRT_MINGW_OBJS=$(addprefix build/obj/mingw/, $(SQUIRT_SRCS:.c=.o))
 
+ifeq ($(SQUIRT_CONFIG),true)
+MINGW_GCC_CFLAGS += -DSQUIRT_CONFIG
+endif
+
 mingw: $(MINGW_APPS)
 
 build/mingw/%.dll: support/%.dll

@@ -1,5 +1,10 @@
 
 MUSL_GCC_CFLAGS=-O2 -s $(WARNINGS) -I/$(MUSL_GCC_PREFIX)/include
+
+ifeq ($(SQUIRT_CONFIG),true)
+MUSL_GCC_CFLAGS += -DSQUIRT_CONFIG
+endif
+
 MUSL_APPS=$(addprefix build/musl/, $(CLIENT_APPS))
 SQUIRT_MUSL_OBJS=$(addprefix build/obj/musl/, $(SQUIRT_SRCS:.c=.o))
 

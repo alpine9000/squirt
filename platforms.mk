@@ -24,12 +24,7 @@ ifeq ($(PLATFORM),osx)
 CC=gcc -I/opt/homebrew/opt/libiconv/include
 LDFLAGS=
 STATIC_ANALYZE=-fsanitize=address -fsanitize=undefined
-ifeq ($(RELEASE),true)
-#LIBS=-L/opt/homebrew/opt/libiconv/lib -liconv -lcharset -ltermcap
 LIBS=/opt/homebrew/Cellar/libiconv/1.17/lib/libiconv.a 
-else
-LIBS=-liconv -ltermcap
-endif
 MINGW_GCC_PREFIX=/usr/local/mingw
 MINGW_GCC=$(MINGW_GCC_PREFIX)/bin/x86_64-w64-mingw32-gcc
 MINGW_LIB_PATH=-L$(MINGW_GCC_PREFIX)/lib
