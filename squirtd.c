@@ -1,26 +1,23 @@
-#include <sys/types.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 #include <dos/dostags.h>
 #include <exec/execbase.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/socket.h>
-#include <proto/dos.h>
 #include "common.h"
 
 //#define DEBUG_OUTPUT
 //#define DEBUG_LOG
 
 #ifdef DEBUG_OUTPUT
-#include <stdio.h>
 #define fatalError(x) _fatalError(x)
 #else
 #define printf(...)
 #define fprintf(...)
 #define fatalError(x) _fatalError()
 #endif
+
+#define malloc(x) AllocVec(x, MEMF_PUBLIC | MEMF_ANY)
+#define free(x) FreeVec(x)
 
 #ifdef DEBUG_LOG
 FILE* log_fd;
